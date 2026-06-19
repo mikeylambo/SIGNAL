@@ -2,6 +2,7 @@ import { scene, camera, renderer, boardGroup, pivotGroup, gridFloor, particles, 
 import { cubes } from './board';
 import { state } from '../state';
 import { PACINGS } from '../game/protocols';
+import { isReducedMotion } from '../reducedMotion';
 
 export const loopState = {
   isDragging: false,
@@ -52,7 +53,9 @@ export function animate(timestamp: number): void {
 
   const pPace = PACINGS[state.curPaceIdx];
 
-  if (gridFloor) {
+  const reducedMotion = isReducedMotion();
+
+  if (gridFloor && !reducedMotion) {
     gridFloor.position.z += (pPace.id === 'sprint' ? 0.08 : 0.03) * dt60;
     if (gridFloor.position.z > 1) gridFloor.position.z = 0;
   }
@@ -61,7 +64,7 @@ export function animate(timestamp: number): void {
   pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
   pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
 
-  if (!loopState.isDragging) {
+  if (!loopState.isDragging && !reducedMotion) {
     const driftLerp = 1 - Math.pow(1 - 0.05, dt60);
     boardGroup.position.x += (loopState.mouseX * 0.5 - boardGroup.position.x) * driftLerp;
     boardGroup.position.y += (-loopState.mouseY * 0.5 - boardGroup.position.y) * driftLerp;
@@ -103,13 +106,23 @@ export function flashScreen(color: string): void {
   el.classList.add('flash-active');
 }
 
+// Cancellation token: each cameraShake call increments this. A tick closure
+// captures the token at the moment it's created; if a newer shake starts
+// before the old one finishes, the old tick sees a stale token and exits,
+// preventing two concurrent loops from fighting over camera.position.
+let shakeGeneration = 0;
+
 export function cameraShake(intensity: number, durationMs: number, onComplete?: () => void): void {
+  if (isReducedMotion()) { if (onComplete) onComplete(); return; }
+
   const restX = camera.position.x;
   const restY = camera.position.y;
   const restZ = camera.position.z;
   const start = performance.now();
+  const generation = ++shakeGeneration;
 
   function tick(now: number) {
+    if (generation !== shakeGeneration) { camera.position.set(restX, restY, restZ); return; }
     const elapsed = now - start;
     const progress = Math.min(1, elapsed / durationMs);
     const falloff = 1 - progress;

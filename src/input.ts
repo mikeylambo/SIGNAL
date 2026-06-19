@@ -4,7 +4,7 @@ import { cubes } from './render/board';
 import { loopState } from './render/loop';
 import { handleInteraction } from './game/runLoop';
 import { state } from './state';
-import { composer, bloomPass, renderer } from './render/scene';
+import { composer, bloomPass, renderer, bloomResScale } from './render/scene';
 import { createBoard } from './render/board';
 
 export const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -88,7 +88,10 @@ export function onWindowResize(): void {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (composer) composer.setSize(window.innerWidth, window.innerHeight);
-  if (bloomPass) bloomPass.setSize(window.innerWidth / 2, window.innerHeight / 2);
+  if (bloomPass) {
+    const scale = bloomResScale();
+    bloomPass.setSize(window.innerWidth * scale, window.innerHeight * scale);
+  }
   if (state.pattern.length === 0) {
     createBoard();
   }

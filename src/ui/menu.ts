@@ -3,7 +3,7 @@ import { PROTOCOLS, PACINGS } from '../game/protocols';
 import { getSignal, spendSignal, themes, currentThemeKey, applyTheme, profile, saveProfile } from '../save';
 import { playTone, initAudio, haptic } from '../audio';
 import { renderStatsBar } from './hud';
-import { returnToMenu } from './modals';
+import { returnToMenu, updateReducedMotionText } from './modals';
 import { initGame, stopTimer } from '../game/runLoop';
 
 export function updateMenuText(): void {
@@ -195,6 +195,7 @@ export function setupMenuListeners(): void {
     (document.getElementById('prof-level') as HTMLElement).innerText = String(profile.lifetime.highestLevel);
     (document.getElementById('prof-frags') as HTMLElement).innerText = String(profile.lifetime.signalMined);
     updateHapticsToggleText();
+    updateReducedMotionText();
   });
 
   // Forge modal

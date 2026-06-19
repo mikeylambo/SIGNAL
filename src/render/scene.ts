@@ -4,6 +4,20 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 import { t } from '../save';
 
+// Bloom resolution scales with detected device tier so mid-tier mobile
+// doesn't spend 60% of its frame budget on a blur effect.
+// Tier is estimated once at init from devicePixelRatio + logical core count.
+// low  → 1/4 screen  (single-core / low-DPI)
+// mid  → 1/3 screen  (2–3 cores or mid DPI)
+// high → 1/2 screen  (4+ cores and high DPI — original value)
+export function bloomResScale(): number {
+  const cores = navigator.hardwareConcurrency ?? 2;
+  const dpr = window.devicePixelRatio ?? 1;
+  if (cores <= 2 || dpr <= 1) return 0.25;
+  if (cores <= 3 || dpr <= 1.5) return 0.33;
+  return 0.5;
+}
+
 export let scene: THREE.Scene;
 export let camera: THREE.PerspectiveCamera;
 export let renderer: THREE.WebGLRenderer;
@@ -26,6 +40,11 @@ export function initScene(container: HTMLElement): void {
 
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 8, 12);
+
+  // WebGL availability check — throws a readable error instead of white-screening.
+  const testCanvas = document.createElement('canvas');
+  const gl = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
+  if (!gl) throw new Error('WebGL is not supported or has been disabled on this device.');
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -53,10 +72,11 @@ export function initScene(container: HTMLElement): void {
   scene.add(gridFloor);
 
   try {
+    const scale = bloomResScale();
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2),
+      new THREE.Vector2(window.innerWidth * scale, window.innerHeight * scale),
       0.65,
       0.55,
       0.18

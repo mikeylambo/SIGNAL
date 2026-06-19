@@ -4,6 +4,7 @@ import { initGame, showResultsScreen, registerShowResultsScreen, stopTimer, runT
 import { createBoard } from '../render/board';
 import { updateComboUI, showMessage, renderStatsBar } from './hud';
 import { resetAnimTime, loopState } from '../render/loop';
+import { isReducedMotion, toggleReducedMotion } from '../reducedMotion';
 
 // Register with runLoop so gameOver can call back without circular dep
 registerShowResultsScreen(showResultsScreen);
@@ -71,6 +72,18 @@ export function setupModalListeners(): void {
     updateHapticsToggleText();
     if (profile.settings.haptics && navigator.vibrate) navigator.vibrate(12);
   });
+
+  // Reduced-motion toggle
+  document.getElementById('reduced-motion-btn')!.addEventListener('click', () => {
+    toggleReducedMotion();
+    updateReducedMotionText();
+  });
+}
+
+export function updateReducedMotionText(): void {
+  const btn = document.getElementById('reduced-motion-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.innerText = `Motion: ${isReducedMotion() ? 'Reduced' : 'Full'}`;
 }
 
 function updateHapticsToggleText(): void {

@@ -7,7 +7,10 @@ import { setupModalListeners } from './ui/modals';
 import { onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchMove, onWindowResize } from './input';
 import { cubes, setCubeState, createBoard } from './render/board';
 import type { CubeUserData } from './types';
+import { initErrorBoundary, showFatalError } from './errorBoundary';
 import * as THREE from 'three';
+
+initErrorBoundary();
 
 document.addEventListener('touchmove', (e: TouchEvent) => {
   if (e.touches.length > 1) e.preventDefault();
@@ -19,7 +22,13 @@ window.addEventListener('load', () => {
   updateMenuText();
   applyTheme(currentThemeKey);
 
-  initScene(container);
+  try {
+    initScene(container);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown graphics error.';
+    showFatalError(msg);
+    return;
+  }
 
   // Register theme-change callback now that scene objects exist
   setThemeChangeCallback(() => {
