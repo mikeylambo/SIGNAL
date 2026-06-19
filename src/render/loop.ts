@@ -93,17 +93,8 @@ export function animate(timestamp: number): void {
     }
   }
 
-  if (bloomEnabled && composer) {
-    performance.mark('bloom-start');
-    composer.render();
-    performance.mark('bloom-end');
-    performance.measure('bloom', 'bloom-start', 'bloom-end');
-  } else {
-    performance.mark('render-start');
-    renderer.render(scene, camera);
-    performance.mark('render-end');
-    performance.measure('render', 'render-start', 'render-end');
-  }
+  if (bloomEnabled && composer) composer.render();
+  else renderer.render(scene, camera);
 }
 
 export function flashScreen(color: string): void {
