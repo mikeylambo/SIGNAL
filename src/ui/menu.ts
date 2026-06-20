@@ -104,6 +104,8 @@ function buyTheme(key: string, price: number): void {
 // Deuteranopia and protanopia both struggle with red/green contrast, so
 // these palettes replace that axis with blue/orange, which remains distinct
 // under the most common forms of color-vision deficiency.
+const MONO_DEFAULT: CustomPalette = { bg: '#05080D', base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864' };
+
 const PRESETS: Record<string, CustomPalette> = {
   deuteranopia: { bg: '#05080D', base: '#1A2A38', active: '#FFD60A', correct: '#3FA7FF', wrong: '#FF7800' },
   protanopia:   { bg: '#05080D', base: '#1F2D3B', active: '#E8F5FF', correct: '#5BC4FF', wrong: '#FF8C42' },
@@ -301,7 +303,7 @@ export function setupMenuListeners(): void {
   gSlider.addEventListener('input', onSliderInput);
   bSlider.addEventListener('input', onSliderInput);
 
-  // Colorblind presets
+  // Colorblind presets + reset
   document.getElementById('preset-deuteranopia-btn')!.addEventListener('click', () => {
     draftPalette = { ...PRESETS['deuteranopia'] };
     loadSlotIntoSliders(draftPalette[selectedSlot]);
@@ -309,6 +311,11 @@ export function setupMenuListeners(): void {
   });
   document.getElementById('preset-protanopia-btn')!.addEventListener('click', () => {
     draftPalette = { ...PRESETS['protanopia'] };
+    loadSlotIntoSliders(draftPalette[selectedSlot]);
+    refreshForgeUI();
+  });
+  document.getElementById('preset-reset-btn')!.addEventListener('click', () => {
+    draftPalette = { ...MONO_DEFAULT };
     loadSlotIntoSliders(draftPalette[selectedSlot]);
     refreshForgeUI();
   });
