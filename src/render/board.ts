@@ -63,6 +63,20 @@ export function setCubeState(cube: THREE.Mesh, cubeState: CubeState): void {
   }
 }
 
+// Sets a cube to an arbitrary hex color for Chromatic observe phase.
+// Bypasses the theme-color lookup in setCubeState — Chromatic colors are
+// a fixed palette, not derived from the player's calibration.
+export function setChromaticObserveColor(cube: THREE.Mesh, colorHex: string): void {
+  const colorNum = parseInt(colorHex.replace('#', ''), 16);
+  const mat = cube.material as THREE.MeshStandardMaterial;
+  const edge = (cube.children[0] as THREE.LineSegments).material as THREE.LineBasicMaterial;
+  const rim = mat.userData['rimUniforms'] as { rimColor: { value: THREE.Color }; rimIntensity: { value: number } };
+  mat.emissive.setHex(colorNum); mat.emissiveIntensity = 1.2;
+  edge.color.set(0xffffff);
+  rim.rimColor.value.setHex(colorNum); rim.rimIntensity.value = 1.1;
+  cube.userData['state'] = 'active';
+}
+
 export function createBoard(): void {
   // Remove old cubes but keep reference valid
   cubes.forEach(cube => boardGroup.remove(cube));

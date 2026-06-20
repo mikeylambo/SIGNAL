@@ -9,6 +9,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.0] — 2026-06-20
+
+### Added
+- **Chromatic protocol** (Phase 2b): new cognitive protocol where each target tile
+  lights up in one of N distinct colors during Observe, and the player must recall both
+  position AND color during Execute. Tap a tile → color picker appears → tap the matching
+  swatch. Wrong tile or wrong color = mistake via the existing `handleMistake()` path.
+- **Fixed color set for Chromatic** (`CHROMATIC_COLORS` in `protocols.ts`): 5 colors
+  (Amber, Cyan, Violet, Gold, Jade) chosen for maximum perceptual distinctiveness and
+  CVD-safety (no pure red/green axis). 3 colors in play at level 1, scaling to 4 at
+  level 4 and 5 at level 7. Explicitly does not use the player's Custom Calibration
+  palette — the challenge must be color memory, not fighting a lucky/unlucky custom accent.
+- **`setChromaticObserveColor()`** in `board.ts`: sets cube emissive to an arbitrary
+  hex color, bypassing the theme-color lookup used by `setCubeState`. Needed so
+  Chromatic observe tiles render in their fixed puzzle colors.
+- **Interaction pattern rationale documented**: implemented tap-tile-then-color (Pattern A)
+  over pre-select-color-then-tap (Pattern B). Pattern A keeps the tile-first interaction
+  identical to every other protocol; the color picker is a confirmation step. Pattern B
+  breaks the spatial-first mental model and creates awkward hand movement on mobile
+  (reach to bottom for color strip, back up to board for tile). Pattern A is also easier
+  to teach: "tap the tile, then pick its color."
+
+### Changed
+- Forge Reset button sits alongside the two colorblind preset buttons (same visual
+  treatment, muted styling). Restores all 5 slots to Mono theme values.
+
+---
+
 ## [0.3.0] — 2026-06-20
 
 ### Added

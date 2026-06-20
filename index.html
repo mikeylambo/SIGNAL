@@ -330,6 +330,10 @@
         </div>
     </div>
 
+    <!-- Chromatic color picker — appears when player taps a tile during Execute.
+         Swatch buttons injected dynamically by runLoop so count matches current level. -->
+    <div id="chromatic-picker" style="display:none; position:absolute; bottom:5rem; left:50%; transform:translateX(-50%); z-index:20; flex-direction:row; gap:14px; align-items:center; background:rgba(5,8,13,0.88); backdrop-filter:blur(12px); padding:16px 24px; border-radius:50px; border:1px solid rgba(255,255,255,0.12); pointer-events:auto;"></div>
+
     <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
