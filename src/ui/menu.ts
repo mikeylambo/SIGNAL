@@ -1,6 +1,7 @@
 import { state } from '../state';
 import { PROTOCOLS, PACINGS } from '../game/protocols';
-import { getSignal, spendSignal, themes, currentThemeKey, applyTheme, profile, saveProfile } from '../save';
+import { getSignal, spendSignal, themes, currentThemeKey, applyTheme, profile, saveProfile, lightenHex } from '../save';
+import type { CustomPalette } from '../types';
 import { playTone, initAudio, haptic } from '../audio';
 import { renderStatsBar } from './hud';
 import { returnToMenu, updateReducedMotionText } from './modals';
@@ -97,32 +98,98 @@ function buyTheme(key: string, price: number): void {
   }
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16),
-  } : null;
+// ── Forge helpers ─────────────────────────────────────────────────────────────
+
+// Colorblind-safe presets the player can select then further customize.
+// Deuteranopia and protanopia both struggle with red/green contrast, so
+// these palettes replace that axis with blue/orange, which remains distinct
+// under the most common forms of color-vision deficiency.
+const PRESETS: Record<string, CustomPalette> = {
+  deuteranopia: { bg: '#05080D', base: '#1A2A38', active: '#FFD60A', correct: '#3FA7FF', wrong: '#FF7800' },
+  protanopia:   { bg: '#05080D', base: '#1F2D3B', active: '#E8F5FF', correct: '#5BC4FF', wrong: '#FF8C42' },
+};
+
+type PaletteSlot = keyof CustomPalette;
+let draftPalette: CustomPalette = { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' };
+let selectedSlot: PaletteSlot = 'active';
+
+function relativeLuminance(hex: string): number {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const toLinear = (c: number) => { const s = c / 255; return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+  return 0.2126 * toLinear((n >> 16) & 0xff) + 0.7152 * toLinear((n >> 8) & 0xff) + 0.0722 * toLinear(n & 0xff);
 }
 
-function updateForgePreview(): string {
-  const rSlider = document.getElementById('r-slider') as HTMLInputElement;
-  const gSlider = document.getElementById('g-slider') as HTMLInputElement;
-  const bSlider = document.getElementById('b-slider') as HTMLInputElement;
-  const rVal = document.getElementById('r-val')!;
-  const gVal = document.getElementById('g-val')!;
-  const bVal = document.getElementById('b-val')!;
-  const forgePreview = document.getElementById('forge-preview')!;
+function contrastRatio(a: string, b: string): number {
+  const l1 = relativeLuminance(a), l2 = relativeLuminance(b);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
 
-  const r = parseInt(rSlider.value);
-  const g = parseInt(gSlider.value);
-  const b = parseInt(bSlider.value);
-  rVal.innerText = String(r); gVal.innerText = String(g); bVal.innerText = String(b);
-  const hex = '#' + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1).toUpperCase();
-  forgePreview.style.backgroundColor = hex;
-  forgePreview.style.boxShadow = `0 0 15px ${hex}`;
-  return hex;
+function hexFromSliders(): string {
+  const r = parseInt((document.getElementById('r-slider') as HTMLInputElement).value);
+  const g = parseInt((document.getElementById('g-slider') as HTMLInputElement).value);
+  const b = parseInt((document.getElementById('b-slider') as HTMLInputElement).value);
+  return '#' + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1).toUpperCase();
+}
+
+function loadSlotIntoSliders(hex: string): void {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
+  (document.getElementById('r-slider') as HTMLInputElement).value = String(r);
+  (document.getElementById('g-slider') as HTMLInputElement).value = String(g);
+  (document.getElementById('b-slider') as HTMLInputElement).value = String(b);
+  document.getElementById('r-val')!.innerText = String(r);
+  document.getElementById('g-val')!.innerText = String(g);
+  document.getElementById('b-val')!.innerText = String(b);
+}
+
+function refreshForgeUI(): void {
+  // Tab highlights
+  document.querySelectorAll<HTMLButtonElement>('.forge-slot-tab').forEach(btn => {
+    const active = btn.dataset['slot'] === selectedSlot;
+    btn.style.borderColor = active ? 'var(--active)' : 'rgba(255,255,255,0.14)';
+    btn.style.color = active ? 'var(--active)' : '';
+  });
+  // Large swatch for the selected slot
+  const hex = draftPalette[selectedSlot];
+  const preview = document.getElementById('forge-preview')!;
+  preview.style.backgroundColor = hex;
+  preview.style.boxShadow = selectedSlot !== 'bg' ? `0 0 14px ${hex}` : 'none';
+  // Full palette strip
+  (document.getElementById('forge-prev-bg')      as HTMLElement).style.backgroundColor = draftPalette.bg;
+  (document.getElementById('forge-prev-base')    as HTMLElement).style.backgroundColor = draftPalette.base;
+  (document.getElementById('forge-prev-active')  as HTMLElement).style.backgroundColor = draftPalette.active;
+  (document.getElementById('forge-prev-correct') as HTMLElement).style.backgroundColor = draftPalette.correct;
+  (document.getElementById('forge-prev-wrong')   as HTMLElement).style.backgroundColor = draftPalette.wrong;
+  // Contrast warning: base cubes vs background (WCAG-adjacent threshold of 2:1)
+  const warning = document.getElementById('forge-contrast-warning')!;
+  warning.style.display = contrastRatio(draftPalette.base, draftPalette.bg) < 2.0 ? 'block' : 'none';
+}
+
+function openForge(): void {
+  draftPalette = { ...profile.customPalette };
+  selectedSlot = 'active';
+  loadSlotIntoSliders(draftPalette[selectedSlot]);
+  refreshForgeUI();
+}
+
+function applyForge(): void {
+  profile.customPalette = { ...draftPalette };
+  profile.customHex = draftPalette.active;  // keep legacy field in sync
+  saveProfile();
+
+  const h = (hex: string) => parseInt(hex.replace('#', ''), 16);
+  const p = draftPalette;
+  themes.custom.primary    = p.active;
+  themes.custom.bg         = h(p.bg);    themes.custom.bgHex      = p.bg;
+  themes.custom.active     = h(p.active); themes.custom.activeHex  = p.active;
+  themes.custom.correct    = h(p.correct); themes.custom.correctHex = p.correct;
+  themes.custom.wrong      = h(p.wrong);  themes.custom.wrongHex   = p.wrong;
+  themes.custom.base       = h(p.base);   themes.custom.baseHex    = p.base;
+  themes.custom.edge       = lightenHex(p.base, 1.7);
+
+  applyTheme('custom');
+  playTone('buy');
+  returnToMenu();
 }
 
 export function setupMenuListeners(): void {
@@ -203,31 +270,48 @@ export function setupMenuListeners(): void {
     initAudio();
     (document.getElementById('ui-layer') as HTMLElement).style.display = 'none';
     (document.getElementById('forge-screen') as HTMLElement).style.display = 'flex';
-    const rgb = hexToRgb(themes.custom.activeHex);
-    if (rgb) {
-      rSlider.value = String(rgb.r); gSlider.value = String(rgb.g); bSlider.value = String(rgb.b);
-    }
-    updateForgePreview();
+    openForge();
   });
 
   document.getElementById('close-forge-btn')!.addEventListener('click', returnToMenu);
 
   document.getElementById('apply-forge-btn')!.addEventListener('click', () => {
     initAudio();
-    const hex = updateForgePreview();
-    themes.custom.activeHex = hex;
-    themes.custom.active = parseInt(hex.replace('#', ''), 16);
-    themes.custom.primary = hex;
-    profile.customHex = hex;
-    saveProfile();
-    applyTheme('custom');
-    playTone('buy');
-    returnToMenu();
+    applyForge();
   });
 
-  rSlider.addEventListener('input', updateForgePreview);
-  gSlider.addEventListener('input', updateForgePreview);
-  bSlider.addEventListener('input', updateForgePreview);
+  // Color slot tabs
+  document.querySelectorAll<HTMLButtonElement>('.forge-slot-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedSlot = (btn.dataset['slot'] as PaletteSlot);
+      loadSlotIntoSliders(draftPalette[selectedSlot]);
+      refreshForgeUI();
+    });
+  });
+
+  // RGB sliders update the current slot
+  const onSliderInput = () => {
+    draftPalette[selectedSlot] = hexFromSliders();
+    document.getElementById('r-val')!.innerText = (document.getElementById('r-slider') as HTMLInputElement).value;
+    document.getElementById('g-val')!.innerText = (document.getElementById('g-slider') as HTMLInputElement).value;
+    document.getElementById('b-val')!.innerText = (document.getElementById('b-slider') as HTMLInputElement).value;
+    refreshForgeUI();
+  };
+  rSlider.addEventListener('input', onSliderInput);
+  gSlider.addEventListener('input', onSliderInput);
+  bSlider.addEventListener('input', onSliderInput);
+
+  // Colorblind presets
+  document.getElementById('preset-deuteranopia-btn')!.addEventListener('click', () => {
+    draftPalette = { ...PRESETS['deuteranopia'] };
+    loadSlotIntoSliders(draftPalette[selectedSlot]);
+    refreshForgeUI();
+  });
+  document.getElementById('preset-protanopia-btn')!.addEventListener('click', () => {
+    draftPalette = { ...PRESETS['protanopia'] };
+    loadSlotIntoSliders(draftPalette[selectedSlot]);
+    refreshForgeUI();
+  });
 
   // Store modal
   storeBtn.addEventListener('click', () => {

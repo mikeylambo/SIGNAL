@@ -7,12 +7,21 @@ export interface CubeUserData {
 
 export type CubeState = 'base' | 'active' | 'correct' | 'wrong' | 'decoy';
 
+export interface CustomPalette {
+  base: string;
+  active: string;
+  correct: string;
+  wrong: string;
+  bg: string;
+}
+
 export interface SavedProfile {
   schemaVersion: number;
   signal: number;
   unlockedCalibrations: string[];
   currentCalibration: string;
-  customHex: string;
+  customHex: string;       // legacy v1 field; kept so old saves migrate cleanly
+  customPalette: CustomPalette;
   lifetime: {
     runs: number;
     score: number;
@@ -41,6 +50,7 @@ export interface Theme {
   wrong: number;
   wrongHex: string;
   base: number;
+  baseHex: string;
   edge: number;
 }
 

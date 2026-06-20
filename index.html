@@ -230,9 +230,28 @@
     <div id="forge-screen" class="modal-screen">
         <div class="modal-container" style="border-color: var(--active);">
             <h2 style="color: var(--active);">Calibrate Signal</h2>
-            <div style="margin-bottom: 20px; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.8rem;">Set a custom emission wavelength.</div>
 
-            <div style="display: flex; flex-direction: column; gap: 15px; text-align: left; margin-bottom: 20px;">
+            <!-- Colorblind-safe presets — one-tap starting points to customize from -->
+            <div style="margin-bottom: 14px;">
+                <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">PRESETS</div>
+                <div style="display: flex; gap: 8px;">
+                    <button id="preset-deuteranopia-btn" class="btn-small" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Deuteranopia</button>
+                    <button id="preset-protanopia-btn" class="btn-small" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Protanopia</button>
+                </div>
+            </div>
+
+            <!-- Color slot selector -->
+            <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">EDITING SLOT</div>
+            <div id="forge-slot-tabs" style="display: flex; gap: 5px; margin-bottom: 14px;">
+                <button class="forge-slot-tab btn-small" data-slot="base"    style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">Base</button>
+                <button class="forge-slot-tab btn-small" data-slot="active"  style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">Active</button>
+                <button class="forge-slot-tab btn-small" data-slot="correct" style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">Correct</button>
+                <button class="forge-slot-tab btn-small" data-slot="wrong"   style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">Wrong</button>
+                <button class="forge-slot-tab btn-small" data-slot="bg"      style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">BG</button>
+            </div>
+
+            <!-- RGB sliders for the selected slot -->
+            <div style="display: flex; flex-direction: column; gap: 12px; text-align: left; margin-bottom: 12px;">
                 <div>
                     <div class="forge-label" style="color: #F87171;"><span>Red</span><span id="r-val">0</span></div>
                     <input type="range" id="r-slider" min="0" max="255" value="0">
@@ -247,10 +266,26 @@
                 </div>
             </div>
 
-            <div id="forge-preview" style="width: 100%; height: 60px; border-radius: 3px; margin-bottom: 20px; box-shadow: 0 0 15px #00E5FF; background-color: #00E5FF; border: 2px solid #fff; transition: background-color 0.1s;"></div>
+            <!-- Large swatch for the slot being edited -->
+            <div id="forge-preview" style="width: 100%; height: 40px; border-radius: 3px; margin-bottom: 12px; border: 2px solid rgba(255,255,255,0.25); transition: background-color 0.08s;"></div>
+
+            <!-- Full-palette strip: all 5 slots at a glance -->
+            <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 1px;">PALETTE PREVIEW</div>
+            <div style="display: flex; gap: 3px; height: 28px; border-radius: 3px; overflow: hidden; margin-bottom: 12px;">
+                <div id="forge-prev-bg"      style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
+                <div id="forge-prev-base"    style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
+                <div id="forge-prev-active"  style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
+                <div id="forge-prev-correct" style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
+                <div id="forge-prev-wrong"   style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
+            </div>
+
+            <!-- Contrast warning — shown when base and bg are too similar -->
+            <div id="forge-contrast-warning" style="display: none; padding: 8px 12px; border-radius: 3px; background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.45); color: #FFB800; font-family: var(--font-mono); font-size: 0.75rem; margin-bottom: 12px; text-align: left;">
+                &#9888; Base and BG are too similar — cubes may be hard to see.
+            </div>
 
             <div style="display: flex; gap: 10px;">
-                <button id="apply-forge-btn" class="btn-store" style="background: var(--active); color: #001016; border-color: #fff;">Save &amp; Apply</button>
+                <button id="apply-forge-btn" style="background: var(--active); color: #001016; border-color: #fff; font-weight: 800;">Save &amp; Apply</button>
                 <button id="close-forge-btn" class="btn-small">Cancel</button>
             </div>
         </div>

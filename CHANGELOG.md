@@ -9,6 +9,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.0] — 2026-06-20
+
+### Added
+- **Full custom palette in Forge** (Phase 2.1 / Custom Calibration): the Forge now
+  exposes all five color slots — Base (idle cube), Active (flash), Correct, Wrong, and
+  Background — instead of a single accent color. Each slot has its own RGB sliders;
+  clicking a slot tab loads its current values.
+- **Colorblind-safe presets**: two one-tap starting points — Deuteranopia (blue/orange,
+  replaces the red/green axis) and Protanopia (high-contrast blue/orange variant) —
+  which the player can then further customize. Both are selectable from the Forge modal.
+- **Contrast validation**: if Base and Background colors are too similar (relative
+  luminance contrast ratio below 2:1 per WCAG formula), a warning is shown in the Forge
+  before the player saves. Saving is not blocked — the warning is informational.
+- **`CustomPalette` interface** in `types.ts` enforces the five-slot shape at compile time.
+- **CLAUDE.md** project guidance file for future Claude Code sessions.
+
+### Changed
+- **Save schema bumped to v2**: existing saves migrate automatically — `customHex` is
+  preserved and used as the `active` slot of the new palette; remaining slots backfill
+  from Mono defaults.
+- **`Theme` interface** gains `baseHex: string` so the Forge can read and write the
+  cube base color without parsing the integer form.
+- **Custom calibration is always free** (unlocked by default). Documented in code:
+  it's an accessibility tool as much as a cosmetic one; contrast-gating it would
+  undermine colorblind-preset support.
+
+---
+
 ## [0.2.0] — 2026-06-19
 
 ### Added
