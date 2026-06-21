@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { state } from '../state';
-import { PROTOCOLS, PACINGS, CHROMATIC_COLORS } from './protocols';
-import { cubes, setCubeState, setChromaticObserveColor, createBoard } from '../render/board';
+import { PROTOCOLS, PACINGS } from './protocols';
+import { cubes, setCubeState, createBoard } from '../render/board';
 import { camera, spawnParticles } from '../render/scene';
 import { loopState, cameraShake, flashScreen } from '../render/loop';
 import { playTone, haptic } from '../audio';
@@ -61,57 +61,6 @@ export function stopTimer(): void {
   if (state.timerAnimationId) cancelAnimationFrame(state.timerAnimationId);
 }
 
-// ── Chromatic helpers ──────────────────────────────────────────────────────────
-
-function chromaticColorCount(): number {
-  if (state.level >= 7) return Math.min(5, CHROMATIC_COLORS.length);
-  if (state.level >= 4) return 4;
-  return 3;
-}
-
-function showChromaticPicker(visible: boolean): void {
-  const picker = document.getElementById('chromatic-picker');
-  if (picker) picker.style.display = visible ? 'flex' : 'none';
-}
-
-// Rebuilds the swatch buttons for the current level's color count.
-// Called once per Chromatic level (count can grow with difficulty).
-function setupChromaticPicker(colorCount: number): void {
-  const picker = document.getElementById('chromatic-picker')!;
-  picker.innerHTML = '';
-  for (let i = 0; i < colorCount; i++) {
-    const { hex, label } = CHROMATIC_COLORS[i];
-    const btn = document.createElement('button');
-    btn.style.cssText = `width:44px;height:44px;border-radius:50%;background:${hex};border:3px solid rgba(255,255,255,0.3);cursor:pointer;box-shadow:0 0 14px ${hex};transition:transform 0.1s;padding:0;pointer-events:auto;`;
-    btn.setAttribute('aria-label', label);
-    btn.addEventListener('click', (e) => { e.stopPropagation(); handleChromaticColorPick(i); });
-    picker.appendChild(btn);
-  }
-  picker.style.display = 'none';
-}
-
-// Called when the player taps a color swatch after selecting a tile.
-// Checks whether the chosen color matches what was shown during Observe.
-function handleChromaticColorPick(colorIdx: number): void {
-  if (!state.isPlayable || state.isPaused || state.chromaticPending === null) return;
-  const { cubeIdx, patternPos } = state.chromaticPending;
-  state.chromaticPending = null;
-  showChromaticPicker(false);
-
-  const cube = cubes[cubeIdx];
-  if (colorIdx === state.chromaticColors[patternPos]) {
-    state.userClicks.push(cubeIdx);
-    processHit(cube, 1.5);
-    if (state.userClicks.length === state.pattern.length) {
-      state.isPlayable = false;
-      (document.getElementById('pause-btn') as HTMLButtonElement).style.display = 'none';
-      if (PACINGS[state.curPaceIdx].id === 'classic') stopTimer();
-      setTimeout(levelComplete, 400);
-    }
-  } else {
-    handleMistake(cube, 'COLOR MISMATCH');
-  }
-}
 
 export async function initGame(): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
@@ -130,8 +79,6 @@ export async function initGame(): Promise<void> {
   state.level = 1; state.score = 0; state.streak = 0; state.maxStreak = 0;
   state.mistakes = 0; state.clears = 0; state.earnedFragments = 0;
   state.combo = 0; state.maxCombo = 0;
-  state.chromaticColors = []; state.chromaticPending = null;
-  showChromaticPicker(false);
   updateComboUI();
 
   state.gridSize = 3; state.activeCount = 3; state.nBackActive = false;
@@ -201,12 +148,6 @@ export async function startLevel(): Promise<void> {
     }
   }
 
-  if (pMode.id === 'chromatic') {
-    const colorCount = chromaticColorCount();
-    state.chromaticColors = state.pattern.map(() => Math.floor(Math.random() * colorCount));
-    setupChromaticPicker(colorCount);
-  }
-
   showMessage('Observe', 'var(--active)');
   await delay(300);
   const speedMult = pPace.id === 'sprint' ? 0.6 : 1;
@@ -221,14 +162,9 @@ export async function startLevel(): Promise<void> {
   } else {
     for (let i = 0; i < state.pattern.length; i++) {
       if (state.isPaused) return;
-      if (pMode.id === 'chromatic') {
-        setChromaticObserveColor(cubes[state.pattern[i]], CHROMATIC_COLORS[state.chromaticColors[i]].hex);
-      } else {
-        setCubeState(cubes[state.pattern[i]], 'active');
-      }
+      setCubeState(cubes[state.pattern[i]], 'active');
       playTone('active');
-      // Chromatic gets 500ms — player must register both position and color
-      let pause = pMode.id === 'chromatic' ? 500 * speedMult : 200 * speedMult;
+      let pause = 200 * speedMult;
       if (pMode.id === 'rhythm') {
         const options = [200, 400, 600];
         pause = options[Math.floor(Math.random() * options.length)] * speedMult;
@@ -327,17 +263,6 @@ export function handleInteraction(cube: THREE.Mesh): void {
     return;
   }
 
-  // Chromatic: tile tap opens the color picker; the color pick itself resolves the interaction
-  if (pMode.id === 'chromatic') {
-    if (state.chromaticPending !== null) return;  // already waiting for color pick
-    if (state.userClicks.includes(index)) return;
-    if (!state.pattern.includes(index)) { handleMistake(cube, 'INVALID NODE'); return; }
-    state.chromaticPending = { cubeIdx: index, patternPos: state.pattern.indexOf(index) };
-    setCubeState(cube, 'active');
-    showChromaticPicker(true);
-    return;
-  }
-
   if (state.userClicks.includes(index)) return;
   let isCorrect = false;
 
@@ -399,8 +324,6 @@ export function handleMistake(wrongCube: THREE.Mesh | null, reason: string): voi
   const pPace = PACINGS[state.curPaceIdx];
   const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
 
-  state.chromaticPending = null;
-  showChromaticPicker(false);
   resetCombo();
   state.isPlayable = false;
   pauseBtn.style.display = 'none';
@@ -486,8 +409,6 @@ export function gameOver(reasonText: string): void {
   const endTitle = document.getElementById('end-title')!;
 
   state.isPlayable = false;
-  state.chromaticPending = null;
-  showChromaticPicker(false);
   stopTimer();
   playTone('wrong'); haptic('wrong');
   pauseBtn.style.display = 'none';

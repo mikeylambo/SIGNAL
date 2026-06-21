@@ -31,7 +31,4 @@ export const state = {
   wasTimerActiveBeforePause: false,
   curProtIdx: 0,
   curPaceIdx: 0,
-  // Chromatic protocol state
-  chromaticColors: [] as number[],  // color index per pattern position
-  chromaticPending: null as null | { cubeIdx: number; patternPos: number },
 };

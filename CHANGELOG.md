@@ -7,6 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed
+- **Chromatic protocol** cut after playtesting revealed it couldn't hold up
+  under real use conditions. Two rounds of fixes (color contrast recompute in
+  Oklch/CIELAB with CVD simulation; redundant shape cues per swatch) addressed
+  individual symptoms but didn't fix the underlying issue: the colour-recall
+  mechanic is hard to make accessible and legible at the same time. The board
+  rotates freely during Execute, which means shape cues printed on flat swatches
+  don't map cleanly to rotated 3D tiles, breaking the shape-as-fallback guarantee.
+  Colour contrast was also only barely adequate (floor 5.5:1) without obvious
+  headroom to improve further without sacrificing visual differentiation. Protocol
+  removed cleanly: `CHROMATIC_COLORS` and `id: 'chromatic'` from `protocols.ts`,
+  all picker/color-assignment logic from `runLoop.ts`, `setChromaticObserveColor`
+  from `board.ts`, `chromaticColors`/`chromaticPending` from `state.ts`, and the
+  `#chromatic-picker` DOM node from `index.html`. Custom Calibration is unaffected.
+
 ---
 
 ## [0.4.0] — 2026-06-20
