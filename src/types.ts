@@ -29,6 +29,7 @@ export interface SavedProfile {
     signalMined: number;
     bestCombo: number;
   };
+  hasSeenOnboarding: boolean;
   lastDailyDate: string | null;
   settings: {
     haptics: boolean;

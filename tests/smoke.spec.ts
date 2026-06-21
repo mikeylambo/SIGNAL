@@ -3,6 +3,24 @@ import { test, expect, Page } from '@playwright/test';
 // How long the 3-2-1-GO countdown takes: 3 × 800ms + 500ms GO = ~2900ms. Add slack.
 const COUNTDOWN_MS = 4000;
 
+// Seed localStorage before each test so the onboarding flow doesn't block game interaction.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('sig_profile_v1', JSON.stringify({
+      schemaVersion: 3,
+      signal: 0,
+      unlockedCalibrations: ['mono', 'custom'],
+      currentCalibration: 'mono',
+      customHex: '#00E5FF',
+      customPalette: { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' },
+      hasSeenOnboarding: true,
+      lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
+      lastDailyDate: null,
+      settings: { haptics: true, sfx: true },
+    }));
+  });
+});
+
 async function startGame(page: Page): Promise<void> {
   await page.locator('#start-btn').click();
   // Wait for countdown to finish and Execute phase to begin
@@ -33,9 +51,11 @@ test('Engage starts countdown then enters Execute phase', async ({ page }) => {
   // Countdown digits appear
   await expect(page.locator('#countdown-overlay')).toBeVisible();
 
-  // After countdown, the center-display (menu) should be hidden and pause btn should appear
-  await page.waitForTimeout(COUNTDOWN_MS);
-  await expect(page.locator('#pause-btn')).toBeVisible();
+  // Pause button appears when Execute phase begins: countdown (~2.9s) +
+  // "Constructing" delay (500ms) + Observe phase (~1.35s) ≈ 4.8s from click.
+  // Use a generous explicit timeout rather than a fixed sleep so the test
+  // passes regardless of machine speed.
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
 
   expect(errors).toHaveLength(0);
 });

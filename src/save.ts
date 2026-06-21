@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -28,6 +28,7 @@ const SaveSystem = (() => {
       customHex: '#00E5FF',
       customPalette: { ...DEFAULT_PALETTE },
       lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
+      hasSeenOnboarding: false,
       lastDailyDate: null,
       settings: { haptics: true, sfx: true },
     };
@@ -44,6 +45,11 @@ const SaveSystem = (() => {
         bg: '#05080D',
       };
       raw.schemaVersion = 2;
+    }
+    if (raw.schemaVersion < 3) {
+      // v2 → v3: existing players have already seen the app — skip onboarding for them
+      raw.hasSeenOnboarding = true;
+      raw.schemaVersion = 3;
     }
     return raw;
   }

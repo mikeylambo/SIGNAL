@@ -19,6 +19,13 @@ export function registerShowResultsScreen(fn: () => void): void {
   _showResultsScreen = fn;
 }
 
+// Onboarding hooks — set by onboarding.ts for the single guided tutorial round,
+// cleared immediately after firing so they never affect normal gameplay.
+type ObHooks = { onObserve?: () => void; onExecute?: () => void; onRoundEnd?: () => void };
+let _ob: ObHooks = {};
+export function setOnboardingHooks(h: ObHooks): void { _ob = h; }
+export function clearOnboardingHooks(): void { _ob = {}; }
+
 export async function runCountdown(): Promise<void> {
   return new Promise(async resolve => {
     const countdownEl = document.getElementById('countdown-overlay')!;
@@ -149,6 +156,7 @@ export async function startLevel(): Promise<void> {
   }
 
   showMessage('Observe', 'var(--active)');
+  _ob.onObserve?.();
   await delay(300);
   const speedMult = pPace.id === 'sprint' ? 0.6 : 1;
 
@@ -178,6 +186,7 @@ export async function startLevel(): Promise<void> {
 
   if (state.isPaused) return;
   showMessage('Execute', 'var(--text)');
+  _ob.onExecute?.();
   state.isPlayable = true;
   state.lastClickTime = 0;
   pauseBtn.style.display = 'flex';
@@ -369,6 +378,10 @@ export async function levelComplete(): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
+  // Fire onboarding hook before any animation so the tutorial card appears
+  // during the level-complete delay rather than after the next level starts.
+  const obEnd = _ob.onRoundEnd; clearOnboardingHooks(); obEnd?.();
+
   playTone('levelUp'); haptic('levelUp');
   const oldLevel = state.level;
 
@@ -410,6 +423,7 @@ export function gameOver(reasonText: string): void {
 
   state.isPlayable = false;
   stopTimer();
+  const obEnd = _ob.onRoundEnd; clearOnboardingHooks(); obEnd?.();
   playTone('wrong'); haptic('wrong');
   pauseBtn.style.display = 'none';
   endTitle.innerText = reasonText;

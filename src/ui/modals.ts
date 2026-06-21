@@ -33,8 +33,6 @@ export function returnToMenu(): void {
   renderStatsBar();
   stopTimer();
   createBoard();
-  const chromaticPicker = document.getElementById('chromatic-picker');
-  if (chromaticPicker) chromaticPicker.style.display = 'none';
 }
 
 export function setupModalListeners(): void {
