@@ -7,6 +7,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Leaderboard data layer** (backend plumbing, no UI yet):
+  - `@supabase/supabase-js` installed; lazy `getClient()` in `src/lib/supabase.ts` —
+    throws a clear error only when actually called, so the game runs fine without env vars.
+  - `supabase/schema.sql`: `leaderboard_scores` table with RLS, public SELECT policy,
+    post-May-2026 Data API grants, and a `submit_score` SECURITY DEFINER function that
+    validates inputs and upserts only when the new score beats the stored one.
+  - `src/game/leaderboard.ts`: `modeBoardKey()`, `dailyBoardKey()`, `submitScore()`,
+    `fetchBoard()`, `setDisplayName()`. All network calls are wrapped in try/catch —
+    leaderboard failures never crash the game.
+  - Client-side profanity filter in `submitScore` (normalised string match); comment
+    notes that the DB function is the authoritative place for stronger moderation.
+  - `SCHEMA_VERSION` bumped to 4; `player_id` (stable UUID) and `display_name` added to
+    `SavedProfile`; v3→v4 migration in `save.ts` generates a UUID for existing players.
+  - `src/vite-env.d.ts` added to type `import.meta.env.VITE_SUPABASE_URL/ANON_KEY`.
+  - `.env.example` added; `.gitignore` already covered `.env`.
+  - `window.__signal.leaderboard` exposes `{submitScore, fetchBoard, modeBoardKey,
+    dailyBoardKey, setDisplayName}` **temporarily** for console testing — to be removed
+    once the leaderboard UI is built.
+
 ### Changed
 - **Onboarding four-fix pass** (Phase 3c): four confirmed issues from real fresh-launch
   playtesting, all fixed in one pass:

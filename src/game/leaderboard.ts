@@ -1,0 +1,124 @@
+import { getClient } from '../lib/supabase';
+import { profile, saveProfile } from '../save';
+
+// ── Board key helpers ──────────────────────────────────────────────────────────
+
+/** e.g. "mode:spatial:classic" */
+export function modeBoardKey(protocol: string, pacing: string): string {
+  return `mode:${protocol}:${pacing}`;
+}
+
+/** e.g. "daily:2026-06-22" */
+export function dailyBoardKey(date: string): string {
+  return `daily:${date}`;
+}
+
+// ── Leaderboard entry type ─────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  rank: number;
+  display_name: string;
+  score: number;
+  level_reached: number | null;
+  player_id: string;
+}
+
+// ── Client-side profanity filter ───────────────────────────────────────────────
+// This is a last-resort UX guard only — trivially bypassed by a motivated bad actor.
+// For app-store compliance the submit_score DB function is the right place for
+// stronger moderation: a content-classification call, manual report queue, or
+// automated ban list surfaced in a moderation dashboard.
+const BLOCKED_WORDS: ReadonlyArray<string> = [
+  'fuck', 'shit', 'cunt', 'bitch', 'dick', 'cock', 'pussy', 'ass',
+  'nigger', 'nigga', 'faggot', 'fag', 'retard', 'chink', 'spic', 'kike', 'gook',
+];
+
+function containsProfanity(name: string): boolean {
+  const normalised = name.toLowerCase().replace(/[^a-z]/g, '');
+  return BLOCKED_WORDS.some(w => normalised.includes(w));
+}
+
+// ── Display name helper (for console testing) ──────────────────────────────────
+
+/** Sets the player's display name and persists it to the save file. */
+export function setDisplayName(name: string): void {
+  profile.display_name = name.trim().slice(0, 32);
+  saveProfile();
+}
+
+// ── Submit score ───────────────────────────────────────────────────────────────
+
+/**
+ * Upserts a score for the current player on `boardKey`.
+ * The server only updates the row when the new score beats the stored one.
+ * Any network or validation failure is caught and logged — the game never crashes.
+ */
+export async function submitScore(
+  boardKey: string,
+  score: number,
+  levelReached: number,
+  protocol?: string,
+  pacing?: string,
+): Promise<void> {
+  try {
+    const supabase = getClient();
+    const { player_id, display_name } = profile;
+
+    if (!player_id) throw new Error('player_id not initialised');
+    if (!display_name || display_name.trim().length === 0) {
+      throw new Error('display_name is empty — set one before submitting to the leaderboard');
+    }
+    if (containsProfanity(display_name)) {
+      throw new Error('display_name contains disallowed content');
+    }
+
+    const { error } = await supabase.rpc('submit_score', {
+      p_board_key:     boardKey,
+      p_player_id:     player_id,
+      p_display_name:  display_name.trim().slice(0, 32),
+      p_score:         score,
+      p_level_reached: levelReached,
+      p_protocol:      protocol ?? null,
+      p_pacing:        pacing ?? null,
+    });
+
+    if (error) throw error;
+  } catch (err) {
+    // Leaderboard failures must never surface to the player or crash the game.
+    console.warn('[leaderboard] submitScore failed:', err);
+  }
+}
+
+// ── Fetch top scores ───────────────────────────────────────────────────────────
+
+/**
+ * Returns the top `limit` scores for `boardKey`, ranked by score descending.
+ * Returns an empty array on any error so callers need no special handling.
+ */
+export async function fetchBoard(
+  boardKey: string,
+  limit = 10,
+): Promise<LeaderboardEntry[]> {
+  try {
+    const supabase = getClient();
+    const { data, error } = await supabase
+      .from('leaderboard_scores')
+      .select('display_name, score, level_reached, player_id')
+      .eq('board_key', boardKey)
+      .order('score', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return (data ?? []).map((row, i) => ({
+      rank:          i + 1,
+      display_name:  row.display_name as string,
+      score:         row.score as number,
+      level_reached: row.level_reached as number | null,
+      player_id:     row.player_id as string,
+    }));
+  } catch (err) {
+    console.warn('[leaderboard] fetchBoard failed:', err);
+    return [];
+  }
+}

@@ -7,13 +7,15 @@ const COUNTDOWN_MS = 4000;
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('sig_profile_v1', JSON.stringify({
-      schemaVersion: 3,
+      schemaVersion: 4,
       signal: 0,
       unlockedCalibrations: ['mono', 'custom'],
       currentCalibration: 'mono',
       customHex: '#00E5FF',
       customPalette: { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' },
       hasSeenOnboarding: true,
+      player_id: '00000000-0000-0000-0000-000000000001',
+      display_name: 'TestPlayer',
       lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
       lastDailyDate: null,
       settings: { haptics: true, sfx: true },

@@ -30,6 +30,8 @@ export interface SavedProfile {
     bestCombo: number;
   };
   hasSeenOnboarding: boolean;
+  player_id: string;     // stable UUID generated once; used as leaderboard identity
+  display_name: string;  // player-chosen name shown on the leaderboard
   lastDailyDate: string | null;
   settings: {
     haptics: boolean;
