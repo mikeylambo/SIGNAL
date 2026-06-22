@@ -21,7 +21,14 @@ export function registerShowResultsScreen(fn: () => void): void {
 
 // Onboarding hooks — set by onboarding.ts for the single guided tutorial round,
 // cleared immediately after firing so they never affect normal gameplay.
-type ObHooks = { onObserve?: () => void; onExecute?: () => void; onRoundEnd?: () => void };
+type ObHooks = {
+  onObserve?: () => void;
+  onExecute?: () => void;
+  onRoundEnd?: () => void;
+  // Intercepts handleMistake before any pacing logic fires (gameOver / zen restart).
+  // Return early prevents camera shake, results screen, etc. during the tutorial.
+  onMistake?: () => void;
+};
 let _ob: ObHooks = {};
 export function setOnboardingHooks(h: ObHooks): void { _ob = h; }
 export function clearOnboardingHooks(): void { _ob = {}; }
@@ -349,6 +356,9 @@ export function handleMistake(wrongCube: THREE.Mesh | null, reason: string): voi
     });
   }
 
+  // Tutorial intercept: skip all pacing/game-over logic when onboarding is active
+  if (_ob.onMistake) { const fn = _ob.onMistake; clearOnboardingHooks(); fn(); return; }
+
   if (pPace.id === 'classic' || pMode.id === 'nback') {
     state.nBackActive = false;
     gameOver(reason || 'RUN FAILED');
@@ -378,11 +388,16 @@ export async function levelComplete(): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
-  // Fire onboarding hook before any animation so the tutorial card appears
-  // during the level-complete delay rather than after the next level starts.
-  const obEnd = _ob.onRoundEnd; clearOnboardingHooks(); obEnd?.();
+  // Fire onboarding hook before animations. If a hook was registered we're in
+  // the tutorial — return immediately after playing the success sound so that
+  // startLevel() is never called underneath the tutorial UI.
+  const obEnd = _ob.onRoundEnd;
+  const wasTutorial = !!obEnd;
+  clearOnboardingHooks();
+  obEnd?.();
 
   playTone('levelUp'); haptic('levelUp');
+  if (wasTutorial) return;
   const oldLevel = state.level;
 
   if (pPace.id === 'classic' || pMode.id === 'nback') { state.score += 50; state.level++; }

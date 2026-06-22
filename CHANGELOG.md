@@ -7,6 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Onboarding redesign** (Phase 3b): replaced the hook-driven live-game tutorial
+  with a fully script-driven, step-by-step flow. The board is now frozen and
+  controlled at each beat — no live game timer runs underneath the tutorial.
+  Six steps: Intro card → matrix introduction → controlled Observe flash (tiles
+  flash at 600ms/400ms cadence) → live Execute with no timer (first tile tap
+  dismisses the callout) → timer explanation with a visual stress-bar demo →
+  final card. Both Skip and "Start Training" land on Standby via `returnToMenu()`.
+  Fixes three playtesting issues: (1) the original flow was too passive and
+  competed with live gameplay; (2) letting the timer expire during the final card
+  triggered an immediate game-over; (3) skipping left the player on the main menu
+  instead of Standby.
+- `runLoop.ts`: added `onMistake` hook to `ObHooks` — fires at the start of
+  `handleMistake` before any pacing logic, preventing camera shake / results
+  screen / game-over during the tutorial. `levelComplete` now returns immediately
+  after firing `onRoundEnd` when a tutorial hook was registered, preventing
+  `startLevel()` from running underneath the tutorial UI.
+
 ### Removed
 - **Chromatic protocol** cut after playtesting revealed it couldn't hold up
   under real use conditions. Two rounds of fixes (color contrast recompute in
