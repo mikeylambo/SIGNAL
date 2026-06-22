@@ -6,27 +6,18 @@ import { showMessage } from './hud';
 import { returnToMenu } from './modals';
 import { delay } from '../utils';
 
-// Top-left, centre, bottom-right of the 3×3 grid — clear diagonal pattern
+// Top-left, centre, bottom-right of the 3×3 grid — a clear diagonal
 const TUTORIAL_PATTERN = [0, 4, 8];
 
 let cancelled = false;
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-export function maybeStartOnboarding(): void {
-  if (!profile.hasSeenOnboarding) startOnboarding();
-}
-
-export function replayOnboarding(): void {
-  startOnboarding();
-}
-
-// ── Core flow ──────────────────────────────────────────────────────────────────
-
-async function startOnboarding(): Promise<void> {
+// Called by the Engage button on first launch (menu.ts) and from Operator Log.
+export async function startOnboarding(): Promise<void> {
   cancelled = false;
 
-  // Always begin from a clean Standby state so the board is in its idle pose
+  // Begin from a clean Standby state
   returnToMenu();
 
   const overlay = buildOverlay();
@@ -43,7 +34,7 @@ async function startOnboarding(): Promise<void> {
     primaryBtn: 'BEGIN',
   })) { finish(overlay); return; }
 
-  // ── Step 2: What is the matrix? ────────────────────────────────────────────
+  // ── Step 2: Matrix introduction ────────────────────────────────────────────
   if (!await showCard(overlay, {
     body: 'This is your matrix. During <span style="color:var(--active)">Observe</span>, tiles flash a pattern — memorise which ones lit up. Then you recreate it.',
     primaryBtn: 'GOT IT',
@@ -53,7 +44,7 @@ async function startOnboarding(): Promise<void> {
   // ── Step 3: Controlled observe — flash TUTORIAL_PATTERN slowly ─────────────
   hideCard(overlay);
 
-  // Hide menu buttons so the board is uncluttered during live phases
+  // Hide menu controls so the board is uncluttered during live phases
   const centerDisplay = document.getElementById('center-display')!;
   centerDisplay.style.display = 'none';
 
@@ -63,59 +54,106 @@ async function startOnboarding(): Promise<void> {
   for (const idx of TUTORIAL_PATTERN) {
     if (cancelled) { finish(overlay); return; }
     if (cubes[idx]) setCubeState(cubes[idx], 'active');
-    await delay(600);
-    if (cancelled) { finish(overlay); return; }
+    if (!await awaitOrCancel(delay(600))) { finish(overlay); return; }
     if (cubes[idx]) setCubeState(cubes[idx], 'base');
-    await delay(400);
+    if (!await awaitOrCancel(delay(400))) { finish(overlay); return; }
   }
-  if (cancelled) { finish(overlay); return; }
   hideCallout(overlay);
 
-  // Post-flash confirmation card before unlocking the board
+  // Post-flash confirmation before unlocking the board
   showMessage('Execute', 'var(--text)');
   if (!await showCard(overlay, {
     body: "That was your pattern. Now tap the tiles that flashed — in any order.",
     primaryBtn: 'READY',
   })) { finish(overlay); return; }
 
-  // ── Step 4: Live board — player taps the pattern, no timer running ──────────
+  // ── Step 4: Live board with mistake-retry loop ─────────────────────────────
+  // No initGame() call — script-driven, timer stays off throughout.
+  // Wrong taps show explanation + re-flash. After 2 failures, auto-advance.
   hideCard(overlay);
 
-  // Minimal game state: enough for handleInteraction to work without initGame().
-  // timerActive stays false throughout — no countdown during the tutorial.
-  state.pattern = [...TUTORIAL_PATTERN];
-  state.userClicks = [];
-  state.isPlayable = true;
-  state.isPaused = false;
-  state.timerActive = false;
-  state.curProtIdx = 0; // Spatial — any tap order accepted
-  state.curPaceIdx = 0; // Classic — onMistake hook intercepts before gameOver fires
+  const MAX_ATTEMPTS = 2; // max failures before we auto-advance with a note
+  let attempt = 0;
 
-  let resolveRoundEnd!: () => void;
-  const roundEndP = new Promise<void>(r => { resolveRoundEnd = r; });
+  while (true) {
+    // Reset game state for this attempt
+    state.pattern = [...TUTORIAL_PATTERN];
+    state.userClicks = [];
+    state.isPlayable = true;
+    state.isPaused = false;
+    state.timerActive = false;
+    state.curProtIdx = 0; // Spatial — any order
+    state.curPaceIdx = 0; // Classic — onMistake hook intercepts before gameOver
 
-  setOnboardingHooks({
-    // Fired by handleMistake (before any pacing logic) — prevents gameOver/camera shake
-    onMistake: () => { state.isPlayable = false; resolveRoundEnd(); },
-    // Fired by levelComplete (success) — levelComplete returns immediately after
-    onRoundEnd: () => { resolveRoundEnd(); },
-  });
+    let resolveRound!: (r: 'success' | 'mistake') => void;
+    const roundP = new Promise<'success' | 'mistake'>(r => { resolveRound = r; });
 
-  showCallout(overlay, 'Tap the tiles that flashed — in any order.');
+    setOnboardingHooks({
+      // Intercepts handleMistake before any pacing/gameOver/camera-shake logic
+      onMistake: () => { state.isPlayable = false; resolveRound('mistake'); },
+      // Intercepts levelComplete — tutorial returns immediately after hook
+      onRoundEnd: () => { resolveRound('success'); },
+    });
 
-  // Detect the first tile tap: correct taps push to userClicks; wrong taps set isPlayable=false
-  const firstTapP = new Promise<void>(resolve => {
-    const poll = setInterval(() => {
-      if (state.userClicks.length > 0 || !state.isPlayable || cancelled) {
-        clearInterval(poll); resolve();
-      }
-    }, 50);
-  });
-  if (!await awaitOrCancel(firstTapP)) { finish(overlay); return; }
-  hideCallout(overlay);
+    showCallout(overlay, attempt === 0
+      ? 'Tap the tiles that flashed — in any order.'
+      : 'Try again — same pattern.');
 
-  // Wait for the round to end (success or mistake)
-  if (!await awaitOrCancel(roundEndP)) { finish(overlay); return; }
+    // Wait for the first tile tap (correct pushes to userClicks; wrong sets isPlayable=false)
+    const firstTapP = new Promise<void>(resolve => {
+      const poll = setInterval(() => {
+        if (state.userClicks.length > 0 || !state.isPlayable || cancelled) {
+          clearInterval(poll); resolve();
+        }
+      }, 50);
+    });
+    if (!await awaitOrCancel(firstTapP)) { finish(overlay); return; }
+    hideCallout(overlay);
+
+    // Wait for round end
+    const roundResult = await new Promise<'success' | 'mistake' | 'cancelled'>(resolve => {
+      let done = false;
+      const cancelPoll = setInterval(() => {
+        if (cancelled && !done) { done = true; clearInterval(cancelPoll); resolve('cancelled'); }
+      }, 50);
+      roundP.then(r => { if (!done) { done = true; clearInterval(cancelPoll); resolve(r); } });
+    });
+
+    if (roundResult === 'cancelled') { finish(overlay); return; }
+    if (roundResult === 'success') break; // advance to step 5
+
+    // ── Mistake path ───────────────────────────────────────────────────────────
+    attempt++;
+
+    if (attempt >= MAX_ATTEMPTS) {
+      // Two failed attempts — reveal correct tiles then advance
+      showCallout(overlay, "No problem — you'll get it in a real run.");
+      TUTORIAL_PATTERN.forEach(idx => { if (cubes[idx]) setCubeState(cubes[idx], 'active'); });
+      if (!await awaitOrCancel(delay(2500))) { finish(overlay); return; }
+      hideCallout(overlay);
+      cubes.forEach(c => setCubeState(c, 'base'));
+      break;
+    }
+
+    // One failed attempt — explain and re-flash so the player can retry
+    showCallout(overlay, "That tile wasn't in the pattern. In a real run this ends your streak — here, try again.");
+    if (!await awaitOrCancel(delay(2500))) { finish(overlay); return; }
+    hideCallout(overlay);
+
+    cubes.forEach(c => setCubeState(c, 'base'));
+    if (!await awaitOrCancel(delay(300))) { finish(overlay); return; }
+
+    showMessage('Observe', 'var(--active)');
+    for (const idx of TUTORIAL_PATTERN) {
+      if (cancelled) { finish(overlay); return; }
+      if (cubes[idx]) setCubeState(cubes[idx], 'active');
+      if (!await awaitOrCancel(delay(600))) { finish(overlay); return; }
+      if (cubes[idx]) setCubeState(cubes[idx], 'base');
+      if (!await awaitOrCancel(delay(400))) { finish(overlay); return; }
+    }
+    if (cancelled) { finish(overlay); return; }
+    showMessage('Execute', 'var(--text)');
+  }
 
   // ── Step 5: Timer explanation ───────────────────────────────────────────────
   if (!await showCard(overlay, {
@@ -169,20 +207,20 @@ function buildOverlay(): HTMLDivElement {
   el.style.cssText = 'position:fixed;inset:0;z-index:200;pointer-events:none;';
   el.innerHTML = `
     <button id="ob-skip" style="
-      position:absolute;top:16px;right:16px;pointer-events:auto;
+      position:absolute;top:16px;right:16px;z-index:2;pointer-events:auto;
       font-family:var(--font-mono);font-size:0.7rem;letter-spacing:1.5px;
       background:none;border:1px solid rgba(255,255,255,0.18);
       color:rgba(255,255,255,0.4);padding:6px 14px;border-radius:2px;cursor:pointer;">SKIP</button>
     <div id="ob-card" style="
-      display:none;position:absolute;inset:0;
+      display:none;position:absolute;inset:0;z-index:1;
       backdrop-filter:blur(8px);pointer-events:auto;
       flex-direction:column;align-items:center;justify-content:center;padding:32px;"></div>
     <div id="ob-callout" style="
       display:none;position:absolute;bottom:90px;left:50%;transform:translateX(-50%);
       background:rgba(5,8,13,0.9);backdrop-filter:blur(10px);
       border:1px solid rgba(255,255,255,0.1);border-radius:4px;
-      padding:14px 22px;text-align:center;max-width:300px;white-space:normal;
-      pointer-events:none;"></div>`;
+      padding:14px 22px;text-align:center;max-width:320px;white-space:normal;
+      pointer-events:none;z-index:1;"></div>`;
   return el;
 }
 

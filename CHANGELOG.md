@@ -8,6 +8,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- **Onboarding four-fix pass** (Phase 3c): four confirmed issues from real fresh-launch
+  playtesting, all fixed in one pass:
+  1. **Trigger point**: tutorial no longer fires on page load as a blocking interstitial.
+     It now fires on the player's first Engage press — `start-btn` in `menu.ts` checks
+     `hasSeenOnboarding` and routes to `startOnboarding()` or `initGame()` accordingly.
+     The player has already made an active choice to play before being guided.
+  2. **Wrong tile in Step 4** fully redesigned: wrong tap → briefly show the red-tile
+     highlight (same visual as a real mistake, already provided by `handleMistake`) →
+     display callout "That tile wasn't in the pattern. In a real run this ends your
+     streak — here, try again." → reset board and re-flash the same pattern → let the
+     player retry. After 2 failed attempts the correct tiles are revealed for 2.5 s
+     and the tutorial auto-advances with "No problem — you'll get it in a real run."
+     `onMistake` hook fully intercepts before any pacing logic so `gameOver`, camera
+     shake, and `returnToMenu` never fire during the tutorial under any circumstance.
+  3. **Skip button always visible**: was rendered below `#ob-card` in the DOM stacking
+     order; added `z-index:2` to the skip button and `z-index:1` to `#ob-card` so the
+     button is always reachable regardless of which card is displayed.
+  4. **Step 4 routing to main menu**: root cause was #2 — the old single-shot `onMistake`
+     resolved `roundEndP` immediately, fast-pathing through steps 5 and 6 to `finish()`
+     which calls `returnToMenu()`. The retry loop eliminates this path: wrong taps now
+     stay in Step 4 until success or the attempt ceiling is reached.
 - **Onboarding redesign** (Phase 3b): replaced the hook-driven live-game tutorial
   with a fully script-driven, step-by-step flow. The board is now frozen and
   controlled at each beat — no live game timer runs underneath the tutorial.

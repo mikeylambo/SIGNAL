@@ -6,6 +6,7 @@ import { playTone, initAudio, haptic } from '../audio';
 import { renderStatsBar } from './hud';
 import { returnToMenu, updateReducedMotionText } from './modals';
 import { initGame, stopTimer } from '../game/runLoop';
+import { startOnboarding } from './onboarding';
 
 export function updateMenuText(): void {
   const pMode = PROTOCOLS[state.curProtIdx];
@@ -228,7 +229,12 @@ export function setupMenuListeners(): void {
   startBtn.addEventListener('click', () => {
     initAudio();
     state.isDailyRun = false;
-    initGame();
+    // First-ever press: run the guided tutorial instead of jumping straight into a game
+    if (!profile.hasSeenOnboarding) {
+      void startOnboarding();
+    } else {
+      initGame();
+    }
   });
 
   dailyBtn.addEventListener('click', () => {

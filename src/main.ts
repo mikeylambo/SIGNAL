@@ -8,7 +8,7 @@ import { onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchMove, o
 import { cubes, setCubeState, createBoard } from './render/board';
 import type { CubeUserData } from './types';
 import { initErrorBoundary, showFatalError } from './errorBoundary';
-import { maybeStartOnboarding, replayOnboarding } from './ui/onboarding';
+import { startOnboarding as replayOnboarding } from './ui/onboarding';
 import { returnToMenu } from './ui/modals';
 import * as THREE from 'three';
 
@@ -59,8 +59,6 @@ window.addEventListener('load', () => {
     returnToMenu();
     replayOnboarding();
   });
-
-  maybeStartOnboarding();
 
   // Input listeners
   const canvas = container.querySelector('canvas')!;
