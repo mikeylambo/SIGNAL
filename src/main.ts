@@ -1,4 +1,4 @@
-import { initScene, scene, pLight, gridFloor } from './render/scene';
+import { initScene, scene, pLight, gridFloor, camera, renderer } from './render/scene';
 import { startRenderLoop, stopRenderLoop, isLoopRunning } from './render/loop';
 import { state } from './state';
 import { applyTheme, currentThemeKey, t, setThemeChangeCallback } from './save';
@@ -81,5 +81,17 @@ window.addEventListener('load', () => {
   (window as Window & { __signal?: unknown }).__signal = {
     isLoopRunning,
     getState: () => state,
+    // Projects a cube's world position to viewport coordinates so Playwright
+    // tests can click tiles accurately without approximating geometry.
+    getCubeScreenPos: (idx: number): { x: number; y: number } | null => {
+      if (!cubes[idx]) return null;
+      const worldPos = cubes[idx].getWorldPosition(new THREE.Vector3());
+      const ndc = worldPos.clone().project(camera);
+      const rect = renderer.domElement.getBoundingClientRect();
+      return {
+        x: rect.left + (ndc.x + 1) / 2 * rect.width,
+        y: rect.top + (1 - (ndc.y + 1) / 2) * rect.height,
+      };
+    },
   };
 });
