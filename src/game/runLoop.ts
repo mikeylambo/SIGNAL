@@ -84,13 +84,17 @@ export async function initGame(): Promise<void> {
 
   const resultsScreen = document.getElementById('results-screen')!;
   const uiLayer = document.getElementById('ui-layer')!;
-  const centerDisplay = document.getElementById('center-display')!;
   const stressBarContainer = document.getElementById('stress-bar-container')!;
   const stressBar = document.getElementById('stress-bar')!;
 
   resultsScreen.style.display = 'none';
   uiLayer.style.display = 'flex';
-  centerDisplay.style.display = 'none';
+
+  // Hide menu sheet and show gameplay HUD
+  (document.getElementById('menu-sheet')     as HTMLElement).style.display = 'none';
+  (document.getElementById('controls-hint')  as HTMLElement).style.display = 'none';
+  (document.getElementById('header-balance') as HTMLElement).style.display = 'none';
+  (document.getElementById('stats-bar')      as HTMLElement).style.display = 'flex';
 
   state.level = 1; state.score = 0; state.streak = 0; state.maxStreak = 0;
   state.mistakes = 0; state.clears = 0; state.earnedFragments = 0;
@@ -261,7 +265,7 @@ export async function startNBackLevel(): Promise<void> {
 
     state.nBackIsFlashing = false;
     setCubeState(cubes[idx], 'base');
-    if (isMatch && !clickedDuringFlash) { handleMistake(cubes[idx], 'MISSED TARGET'); return; }
+    if (isMatch && !clickedDuringFlash) { handleMistake(cubes[idx], 'MISSED'); return; }
     await delay(300);
   }
   if (state.nBackActive) levelComplete();
@@ -277,7 +281,7 @@ export function handleInteraction(cube: THREE.Mesh): void {
     state.userClicks.push(state.nBackStep);
     const isMatch = (state.nBackStep >= 2 && state.nBackStream[state.nBackStep] === state.nBackStream[state.nBackStep - 2]);
     if (isMatch) processHit(cube, 1.5);
-    else handleMistake(cube, 'FALSE POSITIVE');
+    else handleMistake(cube, 'WRONG TILE');
     return;
   }
 
@@ -294,7 +298,7 @@ export function handleInteraction(cube: THREE.Mesh): void {
     if (pMode.id === 'rhythm' && state.userClicks.length > 0) {
       const timeDelta = Date.now() - state.lastClickTime;
       const expectedDelta = state.rhythmDelays[state.userClicks.length - 1] + 150;
-      if (Math.abs(timeDelta - expectedDelta) > 400) { handleMistake(cube, 'RHYTHM DE-SYNC'); return; }
+      if (Math.abs(timeDelta - expectedDelta) > 400) { handleMistake(cube, 'OFF RHYTHM'); return; }
     }
     state.userClicks.push(index);
     state.lastClickTime = Date.now();
@@ -309,7 +313,7 @@ export function handleInteraction(cube: THREE.Mesh): void {
       setTimeout(levelComplete, 400);
     }
   } else {
-    handleMistake(cube, 'INVALID NODE');
+    handleMistake(cube, 'WRONG TILE');
   }
 }
 
@@ -363,7 +367,7 @@ export function handleMistake(wrongCube: THREE.Mesh | null, reason: string): voi
 
   if (pPace.id === 'classic' || pMode.id === 'nback') {
     state.nBackActive = false;
-    gameOver(reason || 'RUN FAILED');
+    gameOver(reason || 'RUN ENDED');
   } else if (pPace.id === 'zen') {
     state.mistakes++; state.streak = 0; updateStatsUI();
     showMessage(reason || 'OVERLOAD', 'var(--wrong)');
@@ -464,7 +468,6 @@ export async function showResultsScreen(): Promise<void> {
   const streakResult = recordStreakForToday();
 
   const uiLayer = document.getElementById('ui-layer')!;
-  const centerDisplay = document.getElementById('center-display')!;
   const resultsScreen = document.getElementById('results-screen')!;
   const restartBtn = document.getElementById('restart-btn') as HTMLButtonElement;
   const resEarnedFrags = document.getElementById('res-earned-frags')!;
@@ -472,7 +475,6 @@ export async function showResultsScreen(): Promise<void> {
   const endTitle = document.getElementById('end-title')!;
 
   uiLayer.style.display = 'none';
-  centerDisplay.style.display = 'none';
   resultsScreen.style.display = 'flex';
 
   if (state.isDailyRun) {

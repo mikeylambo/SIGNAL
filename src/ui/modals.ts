@@ -5,19 +5,25 @@ import { createBoard } from '../render/board';
 import { updateComboUI, showMessage, renderStatsBar } from './hud';
 import { resetAnimTime, loopState } from '../render/loop';
 import { isReducedMotion, toggleReducedMotion } from '../reducedMotion';
+import { updateMenuText } from './menu';
 
 // Register with runLoop so gameOver can call back without circular dep
 registerShowResultsScreen(showResultsScreen);
 
 export function returnToMenu(): void {
-  (document.getElementById('results-screen') as HTMLElement).style.display = 'none';
-  (document.getElementById('pause-screen') as HTMLElement).style.display = 'none';
-  (document.getElementById('profile-screen') as HTMLElement).style.display = 'none';
-  (document.getElementById('forge-screen') as HTMLElement).style.display = 'none';
-  (document.getElementById('store-screen') as HTMLElement).style.display = 'none';
-  (document.getElementById('ui-layer') as HTMLElement).style.display = 'flex';
-  (document.getElementById('center-display') as HTMLElement).style.display = 'flex';
-  (document.getElementById('ui-layer') as HTMLElement).style.opacity = '1';
+  (document.getElementById('results-screen')  as HTMLElement).style.display = 'none';
+  (document.getElementById('pause-screen')    as HTMLElement).style.display = 'none';
+  (document.getElementById('profile-screen')  as HTMLElement).style.display = 'none';
+  (document.getElementById('forge-screen')    as HTMLElement).style.display = 'none';
+  (document.getElementById('store-screen')    as HTMLElement).style.display = 'none';
+  (document.getElementById('ui-layer')        as HTMLElement).style.display = 'flex';
+  (document.getElementById('ui-layer')        as HTMLElement).style.opacity  = '1';
+
+  // Show bottom sheet + hint; hide gameplay HUD elements
+  (document.getElementById('menu-sheet')      as HTMLElement).style.display = 'flex';
+  (document.getElementById('controls-hint')   as HTMLElement).style.display = 'block';
+  (document.getElementById('header-balance')  as HTMLElement).style.display = 'flex';
+  (document.getElementById('stats-bar')       as HTMLElement).style.display = 'none';
 
   const container = document.getElementById('canvas-container') as HTMLElement;
   container.style.filter = 'none';
@@ -28,11 +34,15 @@ export function returnToMenu(): void {
   const stressBarContainer = document.getElementById('stress-bar-container') as HTMLElement;
   stressBarContainer.style.display = 'none';
 
+  // Clear gameplay message
+  showMessage('', 'var(--text)');
   updateComboUI();
-  showMessage('Standby', 'var(--text)');
   renderStatsBar();
   stopTimer();
   createBoard();
+
+  // Refresh streak display and daily row state
+  updateMenuText();
 }
 
 export function setupModalListeners(): void {
@@ -61,8 +71,6 @@ export function setupModalListeners(): void {
     resetAnimTime();
   });
 
-  // Daily & start buttons wired in menu.ts
-  // Profile modal
   document.getElementById('close-profile-btn')!.addEventListener('click', returnToMenu);
 
   // Haptics toggle
@@ -87,9 +95,7 @@ export function updateReducedMotionText(): void {
 }
 
 function updateHapticsToggleText(): void {
-  const supported = !!navigator.vibrate;
   const btn = document.getElementById('haptics-toggle-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  btn.innerText = supported ? `Haptics: ${profile.settings.haptics ? 'On' : 'Off'}` : 'Haptics: Unsupported';
-  btn.disabled = !supported;
+  btn.innerText = `Haptics: ${profile.settings.haptics ? 'On' : 'Off'}`;
 }

@@ -284,7 +284,7 @@ test('profile modal shows lifetime stats and closes', async ({ page }) => {
 
 test('daily calibration button is present and functional', async ({ page }) => {
   await page.goto('/');
-  const dailyBtn = page.locator('#daily-btn');
+  const dailyBtn = page.locator('#daily-row');
   await expect(dailyBtn).toBeVisible();
   // If not already completed today, it should be clickable
   const isDisabled = await dailyBtn.isDisabled();
@@ -412,7 +412,7 @@ test('daily mode key is date-scoped', async ({ page }) => {
 
   await page.goto('/');
   // Start daily run then trigger game-over via wrong tile
-  await page.locator('#daily-btn').click();
+  await page.locator('#daily-row').click();
   await page.waitForTimeout(COUNTDOWN_MS);
   await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
 

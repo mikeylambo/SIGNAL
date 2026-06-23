@@ -85,6 +85,9 @@ export function onTouchMove(e: TouchEvent): void {
 
 export function onWindowResize(): void {
   camera.aspect = window.innerWidth / window.innerHeight;
+  // Reset zoom on orientation change so a pinch-zoom from portrait doesn't
+  // carry over and leave a stale multiplier in landscape (or vice versa).
+  camera.zoom = 1;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (composer) composer.setSize(window.innerWidth, window.innerHeight);

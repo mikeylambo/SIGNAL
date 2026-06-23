@@ -5,6 +5,7 @@ import { setOnboardingHooks, clearOnboardingHooks, stopTimer } from '../game/run
 import { showMessage } from './hud';
 import { returnToMenu } from './modals';
 import { delay } from '../utils';
+import { playTone, initAudio } from '../audio';
 
 // Top-left, centre, bottom-right of the 3×3 grid — a clear diagonal
 const TUTORIAL_PATTERN = [0, 4, 8];
@@ -16,6 +17,9 @@ let cancelled = false;
 // Called by the Engage button on first launch (menu.ts) and from Operator Log.
 export async function startOnboarding(): Promise<void> {
   cancelled = false;
+
+  // Initialise AudioContext while the user gesture is still on the call stack
+  initAudio();
 
   // Begin from a clean Standby state
   returnToMenu();
@@ -44,16 +48,16 @@ export async function startOnboarding(): Promise<void> {
   // ── Step 3: Controlled observe — flash TUTORIAL_PATTERN slowly ─────────────
   hideCard(overlay);
 
-  // Hide menu controls so the board is uncluttered during live phases
-  const centerDisplay = document.getElementById('center-display')!;
-  centerDisplay.style.display = 'none';
+  // Hide menu sheet so the board is uncluttered during live phases
+  const menuSheet = document.getElementById('menu-sheet')!;
+  menuSheet.style.display = 'none';
 
   showMessage('Observe', 'var(--active)');
   showCallout(overlay, 'Watch carefully — these tiles are your targets.');
 
   for (const idx of TUTORIAL_PATTERN) {
     if (cancelled) { finish(overlay); return; }
-    if (cubes[idx]) setCubeState(cubes[idx], 'active');
+    if (cubes[idx]) { setCubeState(cubes[idx], 'active'); playTone('active'); }
     if (!await awaitOrCancel(delay(600))) { finish(overlay); return; }
     if (cubes[idx]) setCubeState(cubes[idx], 'base');
     if (!await awaitOrCancel(delay(400))) { finish(overlay); return; }
@@ -146,7 +150,7 @@ export async function startOnboarding(): Promise<void> {
     showMessage('Observe', 'var(--active)');
     for (const idx of TUTORIAL_PATTERN) {
       if (cancelled) { finish(overlay); return; }
-      if (cubes[idx]) setCubeState(cubes[idx], 'active');
+      if (cubes[idx]) { setCubeState(cubes[idx], 'active'); playTone('active'); }
       if (!await awaitOrCancel(delay(600))) { finish(overlay); return; }
       if (cubes[idx]) setCubeState(cubes[idx], 'base');
       if (!await awaitOrCancel(delay(400))) { finish(overlay); return; }
@@ -207,12 +211,12 @@ function buildOverlay(): HTMLDivElement {
   el.style.cssText = 'position:fixed;inset:0;z-index:200;pointer-events:none;';
   el.innerHTML = `
     <button id="ob-skip" style="
-      position:absolute;top:16px;right:16px;z-index:2;pointer-events:auto;
+      position:absolute;top:16px;right:16px;z-index:210;pointer-events:auto;
       font-family:var(--font-mono);font-size:0.7rem;letter-spacing:1.5px;
       background:none;border:1px solid rgba(255,255,255,0.18);
       color:rgba(255,255,255,0.4);padding:6px 14px;border-radius:2px;cursor:pointer;">SKIP</button>
     <div id="ob-card" style="
-      display:none;position:absolute;inset:0;z-index:1;
+      display:none;position:absolute;inset:0;z-index:201;
       backdrop-filter:blur(8px);pointer-events:auto;
       flex-direction:column;align-items:center;justify-content:center;padding:32px;"></div>
     <div id="ob-callout" style="

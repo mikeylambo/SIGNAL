@@ -7,6 +7,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed — Menu redesign
+- **Bottom sheet menu**: replaced the centre-display overlay with a sliding
+  bottom sheet. The 3D board is now visible and interactive behind the menu at
+  all times. Sheet hides during gameplay and reappears on return to menu.
+- **Protocol / Pacing / Streak** displayed as three equal columns in the sheet
+  header — bare name only (no "Protocol:" / "Pace:" prefix).
+- **Hint text** updated to two centred lines (protocol hint + pacing hint) using
+  `<br>` rather than the single compressed `·`-joined string.
+- **Streak column** in mode row: shows `N days ◆` in combo colour when streak ≥ 1,
+  dash in muted colour otherwise.
+- **Daily row**: replaced button with a full-width clickable div; shows
+  "available now" vs "complete · returns tomorrow" state without disabling
+  interaction.
+- **Currency balance** moved to top-right header, visible during menu only
+  (gameplay shows the stats bar instead).
+- **Label renames**: "Operator Log" → "Stats", "Exchange" → "Shop",
+  "Calibrate Signal" → "Style", "Signal Balance:" → "Balance:",
+  "Name Your Signal" → "Choose a Name". Subtext on name modal simplified
+  (removed "Choose carefully — it can't be changed.").
+- **Mistake reason strings** simplified: "INVALID NODE" / "FALSE POSITIVE" →
+  "WRONG TILE"; "MISSED TARGET" → "MISSED"; "RHYTHM DE-SYNC" → "OFF RHYTHM";
+  "RUN FAILED" → "RUN ENDED".
+
+### Fixed
+- **Skip button z-index** in onboarding overlay was `z-index:2` — below the
+  sheet's `z-index:200` backdrop — so the button was invisible on mobile.
+  Fixed to `z-index:210`; `#ob-card` set to `z-index:201`.
+- **Orientation-change zoom drift** (`onWindowResize`): `camera.zoom` is now
+  reset to `1` before `updateProjectionMatrix()` so a pinch-zoom from one
+  orientation doesn't carry a stale multiplier into the other.
+- **Tutorial audio**: `initAudio()` is now called at the start of
+  `startOnboarding()` (while the user-gesture call stack is live) and
+  `playTone('active')` fires on each tile flash during both observe sequences.
+- **iOS haptics button**: hidden entirely instead of showing "Unsupported" —
+  detected via `navigator.userAgent` for iPhone/iPad/iPod.
+- **Forge BG slot live preview**: when `selectedSlot === 'bg'`, the slider
+  now also updates `--bg` on `:root` immediately so the page background
+  transitions live while dragging.
+
 ### Fixed
 - **Daily leaderboard mode key** was `"daily"` (a single shared bucket for all
   dates); changed to `"daily_YYYY-MM-DD"` so each day's daily challenge has its

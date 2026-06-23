@@ -48,11 +48,15 @@
 
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
-            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
-            padding: 1.5rem; box-sizing: border-box; transition: opacity 0.3s;
+            pointer-events: none; display: flex; flex-direction: column;
+            transition: opacity 0.3s;
         }
 
-        .header { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; }
+        /* Header takes its own padding so absolute children can reach the edges */
+        .header {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            width: 100%; padding: 1.5rem 1.5rem 0; box-sizing: border-box;
+        }
         h1 { margin: 0; font-family: var(--font-display); font-size: 1.5rem; font-weight: 800; letter-spacing: 6px; color: var(--text); text-transform: uppercase; transition: color 0.5s; }
         h1 .h1-accent { color: var(--active); text-shadow: 0 0 14px var(--active); }
 
@@ -62,11 +66,6 @@
         }
 
         .currency-display { color: var(--currency); text-shadow: 0 0 8px rgba(0, 229, 255, 0.5); display: flex; align-items: center; gap: 5px;}
-
-        .center-display {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; pointer-events: auto; display: flex; flex-direction: column; gap: 0.8rem; align-items: center; width: 100%; max-width: 380px;
-        }
 
         #countdown-overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -105,8 +104,15 @@
         }
         .score-popup.rise { transform: translate(-50%, -180%); opacity: 0; }
 
-        #message { font-family: var(--font-display); font-size: 1.25rem; margin-bottom: 0.4rem; font-weight: 700; letter-spacing: 2px; transition: color 0.3s; text-transform: uppercase; }
-        .sub-message { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem; min-height: 1.2rem; }
+        /* #message is a floating gameplay overlay — hidden during menu via opacity */
+        #message {
+            position: absolute; top: calc(50% - 80px); left: 50%;
+            transform: translateX(-50%);
+            font-family: var(--font-display); font-size: 1.25rem; font-weight: 700;
+            letter-spacing: 2px; text-transform: uppercase; text-align: center;
+            transition: color 0.3s, opacity 0.2s; opacity: 0;
+            white-space: nowrap; pointer-events: none;
+        }
 
         button {
             padding: 14px 22px; font-family: var(--font-display); font-size: 0.95rem; font-weight: 700;
@@ -127,14 +133,8 @@
         .btn-small { font-size: 0.78rem; padding: 11px; letter-spacing: 1.5px; }
         .btn-store { border-color: var(--currency); color: var(--currency); }
         .btn-store:hover { background: rgba(0, 229, 255, 0.08); }
-        .btn-profile { border-color: var(--correct); color: var(--correct); }
-        .btn-profile:hover { background: rgba(57, 255, 136, 0.08); }
-        .btn-daily { border-color: var(--wrong); color: var(--wrong); }
-        .btn-daily:hover { background: rgba(255, 56, 100, 0.08); }
 
         .icon-btn { padding: 10px; width: 45px; height: 45px; font-size: 1.2rem; background: rgba(0,0,0,0.6); display: none; border-radius: 50%; justify-content: center; align-items: center; }
-
-        .controls-hint { align-self: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 1px; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 2px; text-align: center; border: 1px solid rgba(255,255,255,0.06);}
 
         .modal-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-modal); backdrop-filter: blur(20px); z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; box-sizing: border-box; transition: background 0.5s;
@@ -164,8 +164,7 @@
         @keyframes lbPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
 
         @media (max-width: 768px) {
-            #ui-layer { padding: 1rem; }
-            .header { flex-direction: column; align-items: center; gap: 0.8rem; }
+            .header { padding: 1rem 1rem 0; }
             h1 { font-size: 1.6rem; }
             .stats { font-size: 0.9rem; padding: 0.6rem 1rem; gap: 1rem; width: 100%; }
             .icon-btn { position: absolute; top: 1rem; right: 1rem; }
@@ -189,46 +188,121 @@
     <div id="ui-layer">
         <div class="header">
             <div><h1 aria-label="Signal">SIG<span class="h1-accent">NAL</span></h1></div>
+
+            <!-- Gameplay stats — shown during a run, hidden in menu -->
             <div class="header-stats-col">
-                <div class="stats" id="stats-bar" role="status" aria-live="polite" aria-label="Game stats"></div>
+                <div class="stats" id="stats-bar" role="status" aria-live="polite" aria-label="Game stats" style="display:none;"></div>
                 <div id="combo-readout" style="display:none;" aria-hidden="true">
                     <span class="combo-num">0</span><span class="combo-label">COMBO</span>
                 </div>
             </div>
+
+            <!-- Currency balance — shown in menu, hidden during a run -->
+            <div id="header-balance" style="
+                font-family:var(--font-mono); font-size:0.78rem;
+                font-weight:600; color:var(--currency);
+                display:flex; align-items:center; gap:5px;">
+                <span id="header-signal-val">0</span>⟠
+            </div>
+
             <button id="pause-btn" class="icon-btn" style="display:none;" aria-label="Pause">||</button>
         </div>
 
-        <div class="center-display" id="center-display">
-            <div>
-                <div id="message" role="status" aria-live="polite">Standby</div>
-                <div class="sub-message" id="hint-message" aria-live="polite">Set protocol, then engage.</div>
-            </div>
+        <!-- Gameplay message ("Observe", "Execute", etc.) — hidden in menu via opacity -->
+        <div id="message" role="status" aria-live="polite"></div>
 
-            <button id="start-btn" style="margin-bottom: 10px;">Engage</button>
-            <button id="daily-btn" class="btn-daily">&#9670; Daily Calibration</button>
-
-            <div class="btn-row" style="margin-top: 10px;">
-                <button id="protocol-btn" class="btn-small">Protocol: Spatial</button>
-                <button id="pacing-btn" class="btn-small">Pace: Classic</button>
-            </div>
-
-            <div class="btn-row">
-                <button id="profile-btn" class="btn-small btn-profile">Log</button>
-                <button id="forge-btn" class="btn-small">Calibrate</button>
-            </div>
-
-            <button id="store-btn" class="btn-small btn-store">Exchange</button>
+        <!-- Floating hint — sits just above the sheet, hidden during gameplay -->
+        <div id="controls-hint" style="
+            position:absolute; bottom:300px; left:0; right:0;
+            text-align:center; pointer-events:none;
+            font-family:var(--font-mono); font-size:0.72rem;
+            color:var(--text-muted); letter-spacing:1px;">
+            Drag to rotate · Tap to select · Pinch to zoom
         </div>
 
-        <div class="controls-hint" id="controls-hint">
-            Drag to rotate · Tap to select · Pinch to zoom
+        <!-- Bottom sheet — the main menu UI -->
+        <div id="menu-sheet" style="
+            position:absolute; bottom:0; left:0; right:0;
+            background:rgba(7,14,23,0.96); backdrop-filter:blur(20px);
+            border-top:1px solid var(--edge); border-radius:22px 22px 0 0;
+            padding:12px 18px 32px; display:flex; flex-direction:column;
+            gap:10px; pointer-events:auto; transition:transform 0.3s ease;">
+
+            <!-- Drag pill -->
+            <div style="width:28px; height:3px; background:var(--edge);
+                border-radius:2px; margin:0 auto 2px;"></div>
+
+            <!-- Protocol · Pacing · Streak -->
+            <div id="mode-row" style="display:flex; justify-content:space-between;">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;">
+                    <div style="font-family:var(--font-mono);font-size:0.62rem;
+                        color:var(--text-muted);letter-spacing:1.5px;">PROTOCOL</div>
+                    <button id="protocol-btn" style="
+                        background:none; border:none; padding:0; margin:0; width:auto;
+                        font-family:var(--font-mono); font-size:0.78rem; font-weight:700;
+                        color:var(--text); letter-spacing:1px; cursor:pointer;
+                        text-transform:none;">Spatial</button>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;">
+                    <div style="font-family:var(--font-mono);font-size:0.62rem;
+                        color:var(--text-muted);letter-spacing:1.5px;">PACING</div>
+                    <button id="pacing-btn" style="
+                        background:none; border:none; padding:0; margin:0; width:auto;
+                        font-family:var(--font-mono); font-size:0.78rem; font-weight:700;
+                        color:var(--text); letter-spacing:1px; cursor:pointer;
+                        text-transform:none;">Classic</button>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;">
+                    <div style="font-family:var(--font-mono);font-size:0.62rem;
+                        color:var(--text-muted);letter-spacing:1.5px;">STREAK</div>
+                    <div id="streak-display" style="font-family:var(--font-mono);
+                        font-size:0.78rem;font-weight:700;color:var(--text-muted);">—</div>
+                </div>
+            </div>
+
+            <!-- Protocol + pacing hint, two lines -->
+            <div id="hint-message" aria-live="polite" style="
+                font-family:var(--font-mono); font-size:0.72rem;
+                color:var(--text-muted); text-align:center;
+                line-height:1.65; letter-spacing:0.5px; min-height:2.4rem;">
+            </div>
+
+            <!-- Engage -->
+            <button id="start-btn" style="
+                background:var(--active); color:#001016; border:none;
+                border-radius:3px; padding:14px; width:100%;
+                font-family:var(--font-display); font-size:0.95rem;
+                font-weight:800; letter-spacing:3px; cursor:pointer;
+                text-transform:uppercase;">Engage</button>
+
+            <!-- Daily Calibration row — two states: available / complete -->
+            <div id="daily-row" role="button" tabindex="0" style="
+                border:1px solid rgba(255,56,100,0.25); border-radius:3px;
+                background:rgba(255,56,100,0.04); padding:9px 12px;
+                display:flex; flex-direction:column; align-items:center;
+                gap:2px; cursor:pointer; transition:all 0.2s;">
+                <div id="daily-label" style="font-family:var(--font-mono);
+                    font-size:0.72rem; color:var(--wrong); letter-spacing:1px;">
+                    ◆ Daily Calibration</div>
+                <div id="daily-sub" style="font-family:var(--font-mono);
+                    font-size:0.65rem; color:rgba(255,56,100,0.5);
+                    letter-spacing:0.5px;">available now</div>
+            </div>
+
+            <!-- Stats · Style · Shop -->
+            <div style="display:flex; gap:6px;">
+                <button id="profile-btn" class="btn-small" style="flex:1;">Stats</button>
+                <button id="forge-btn" class="btn-small" style="flex:1;">Style</button>
+                <button id="store-btn" class="btn-small btn-store" style="flex:1;">Shop</button>
+            </div>
+
         </div>
     </div>
 
-    <!-- Operator Log Modal -->
+    <!-- Stats Modal -->
     <div id="profile-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="profile-screen-title">
         <div class="modal-container" style="border-color: var(--correct);">
-            <h2 id="profile-screen-title" style="color: var(--correct);">Operator Log</h2>
+            <h2 id="profile-screen-title" style="color: var(--correct);">Stats</h2>
             <div class="final-stats">
                 <div class="stat-box"><span class="stat-label">Total Runs</span><span class="stat-value" id="prof-runs">0</span></div>
                 <div class="stat-box"><span class="stat-label">Lifetime Score</span><span class="stat-value" id="prof-score">0</span></div>
@@ -244,10 +318,10 @@
         </div>
     </div>
 
-    <!-- Calibration Modal -->
+    <!-- Style Modal -->
     <div id="forge-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="forge-screen-title">
         <div class="modal-container" style="border-color: var(--active);">
-            <h2 id="forge-screen-title" style="color: var(--active);">Calibrate Signal</h2>
+            <h2 id="forge-screen-title" style="color: var(--active);">Style</h2>
 
             <!-- Colorblind-safe presets — one-tap starting points to customize from -->
             <div style="margin-bottom: 14px;">
@@ -310,12 +384,12 @@
         </div>
     </div>
 
-    <!-- Exchange Modal -->
+    <!-- Shop Modal -->
     <div id="store-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="store-screen-title">
         <div class="modal-container" style="border-color: var(--currency);">
-            <h2 id="store-screen-title" style="color: var(--currency);">Exchange</h2>
+            <h2 id="store-screen-title" style="color: var(--currency);">Shop</h2>
             <div style="margin-bottom: 20px; font-family: var(--font-mono); font-size: 1.1rem; font-weight: bold; color: var(--currency);">
-                Signal Balance: <span id="store-frag-count">0</span>
+                Balance: <span id="store-frag-count">0</span>
             </div>
             <div id="store-items-container" style="max-height: 250px; overflow-y: auto; margin-bottom: 20px;"></div>
             <button id="close-store-btn" class="btn-small">Close</button>
@@ -371,9 +445,9 @@
         flex-direction:column; align-items:center; justify-content:center;
         padding:1.5rem; box-sizing:border-box;">
         <div class="modal-container" style="border-color:var(--active);">
-            <h2 id="display-name-title" style="color:var(--active);">Name Your Signal</h2>
+            <h2 id="display-name-title" style="color:var(--active);">Choose a Name</h2>
             <p style="font-family:var(--font-mono); font-size:0.82rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.7;">
-                This name appears on leaderboards.<br>Choose carefully — it can't be changed.
+                This name appears on leaderboards.
             </p>
             <input id="display-name-input" type="text" maxlength="20" placeholder="enter callsign"
                 style="width:100%; box-sizing:border-box; padding:12px 14px;

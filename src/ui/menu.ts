@@ -13,25 +13,48 @@ export function updateMenuText(): void {
   const pPace = PACINGS[state.curPaceIdx];
 
   const protocolBtn = document.getElementById('protocol-btn') as HTMLButtonElement;
-  const pacingBtn = document.getElementById('pacing-btn') as HTMLButtonElement;
-  const hintMessageEl = document.getElementById('hint-message')!;
-  const dailyBtn = document.getElementById('daily-btn') as HTMLButtonElement;
+  const pacingBtn   = document.getElementById('pacing-btn')   as HTMLButtonElement;
+  const hintEl      = document.getElementById('hint-message')!;
+  const streakEl    = document.getElementById('streak-display')!;
+  const balanceEl   = document.getElementById('header-signal-val');
 
-  protocolBtn.innerText = `Protocol: ${pMode.name}`;
-  protocolBtn.style.borderColor = pMode.id === 'nback' ? 'var(--combo)' : '';
-  protocolBtn.style.color = pMode.id === 'nback' ? 'var(--combo)' : '';
-  pacingBtn.innerText = `Pace: ${pPace.name}`;
-  hintMessageEl.innerText = `${pMode.hint} · ${pPace.hint}`;
-  renderStatsBar();
+  // Protocol / pacing — bare name, no prefix
+  protocolBtn.textContent = pMode.name;
+  protocolBtn.style.color = pMode.id === 'nback' ? 'var(--combo)' : 'var(--text)';
+  pacingBtn.textContent = pPace.name;
 
-  const today = new Date().toISOString().split('T')[0];
-  if (profile.lastDailyDate === today) {
-    dailyBtn.innerText = 'Calibration Complete';
-    dailyBtn.disabled = true;
+  // Hint — two lines separated by <br>
+  hintEl.innerHTML = `${pMode.hint}<br>${pPace.hint}`;
+
+  // Streak column
+  if (profile.currentStreak >= 1) {
+    const days = profile.currentStreak;
+    streakEl.textContent = `${days} day${days !== 1 ? 's' : ''} ◆`;
+    streakEl.style.color = 'var(--combo)';
   } else {
-    dailyBtn.innerText = '◆ Daily Calibration';
-    dailyBtn.disabled = false;
+    streakEl.textContent = '—';
+    streakEl.style.color = 'var(--text-muted)';
   }
+
+  // Header balance
+  if (balanceEl) balanceEl.textContent = String(getSignal());
+
+  // Daily row state
+  const today = new Date().toISOString().split('T')[0];
+  const done  = profile.lastDailyDate === today;
+  const dailyRow   = document.getElementById('daily-row')   as HTMLElement;
+  const dailyLabel = document.getElementById('daily-label') as HTMLElement;
+  const dailySub   = document.getElementById('daily-sub')   as HTMLElement;
+  if (dailyRow && dailyLabel && dailySub) {
+    dailyRow.style.background   = done ? 'transparent'            : 'rgba(255,56,100,0.04)';
+    dailyRow.style.borderColor  = done ? 'var(--edge)'            : 'rgba(255,56,100,0.25)';
+    dailyRow.style.cursor       = done ? 'default'                : 'pointer';
+    dailyLabel.style.color      = done ? 'var(--text-muted)'      : 'var(--wrong)';
+    dailySub.textContent        = done ? 'complete · returns tomorrow' : 'available now';
+    dailySub.style.color        = done ? 'rgba(107,119,133,0.5)'  : 'rgba(255,56,100,0.5)';
+  }
+
+  renderStatsBar();
 }
 
 export function populateStore(): void {
@@ -197,16 +220,16 @@ function applyForge(): void {
 
 export function setupMenuListeners(): void {
   const protocolBtn = document.getElementById('protocol-btn') as HTMLButtonElement;
-  const pacingBtn = document.getElementById('pacing-btn') as HTMLButtonElement;
-  const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
-  const dailyBtn = document.getElementById('daily-btn') as HTMLButtonElement;
-  const profileBtn = document.getElementById('profile-btn') as HTMLButtonElement;
-  const forgeBtn = document.getElementById('forge-btn') as HTMLButtonElement;
-  const storeBtn = document.getElementById('store-btn') as HTMLButtonElement;
-  const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
-  const rSlider = document.getElementById('r-slider') as HTMLInputElement;
-  const gSlider = document.getElementById('g-slider') as HTMLInputElement;
-  const bSlider = document.getElementById('b-slider') as HTMLInputElement;
+  const pacingBtn   = document.getElementById('pacing-btn')   as HTMLButtonElement;
+  const startBtn    = document.getElementById('start-btn')    as HTMLButtonElement;
+  const dailyRow    = document.getElementById('daily-row')    as HTMLElement;
+  const profileBtn  = document.getElementById('profile-btn')  as HTMLButtonElement;
+  const forgeBtn    = document.getElementById('forge-btn')    as HTMLButtonElement;
+  const storeBtn    = document.getElementById('store-btn')    as HTMLButtonElement;
+  const pauseBtn    = document.getElementById('pause-btn')    as HTMLButtonElement;
+  const rSlider     = document.getElementById('r-slider')     as HTMLInputElement;
+  const gSlider     = document.getElementById('g-slider')     as HTMLInputElement;
+  const bSlider     = document.getElementById('b-slider')     as HTMLInputElement;
 
   protocolBtn.addEventListener('click', () => {
     initAudio();
@@ -229,7 +252,6 @@ export function setupMenuListeners(): void {
   startBtn.addEventListener('click', () => {
     initAudio();
     state.isDailyRun = false;
-    // First-ever press: run the guided tutorial instead of jumping straight into a game
     if (!profile.hasSeenOnboarding) {
       void startOnboarding();
     } else {
@@ -237,14 +259,17 @@ export function setupMenuListeners(): void {
     }
   });
 
-  dailyBtn.addEventListener('click', () => {
+  // Daily row — the entire div is clickable; guard if already completed today
+  dailyRow.addEventListener('click', (_e: MouseEvent) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (profile.lastDailyDate === today) return;
     initAudio();
     state.isDailyRun = true;
-    const today = new Date();
-    const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+    const now = new Date();
+    const seed = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
     state.curProtIdx = seed % PROTOCOLS.length;
-    if (PROTOCOLS[state.curProtIdx].id === 'nback') state.curProtIdx = 0; // n-back not great for daily
-    state.curPaceIdx = 0; // Classic for daily
+    if (PROTOCOLS[state.curProtIdx].id === 'nback') state.curProtIdx = 0;
+    state.curPaceIdx = 0;
     initGame();
   });
 
@@ -260,7 +285,7 @@ export function setupMenuListeners(): void {
     (document.getElementById('canvas-container') as HTMLElement).style.filter = 'blur(15px)';
   });
 
-  // Profile modal
+  // Stats modal
   profileBtn.addEventListener('click', () => {
     initAudio();
     (document.getElementById('ui-layer') as HTMLElement).style.display = 'none';
@@ -277,7 +302,7 @@ export function setupMenuListeners(): void {
     updateReducedMotionText();
   });
 
-  // Forge modal
+  // Style modal
   forgeBtn.addEventListener('click', () => {
     initAudio();
     (document.getElementById('ui-layer') as HTMLElement).style.display = 'none';
@@ -301,12 +326,15 @@ export function setupMenuListeners(): void {
     });
   });
 
-  // RGB sliders update the current slot
+  // RGB sliders — update the current slot and live-preview BG color on body
   const onSliderInput = () => {
     draftPalette[selectedSlot] = hexFromSliders();
     document.getElementById('r-val')!.innerText = (document.getElementById('r-slider') as HTMLInputElement).value;
     document.getElementById('g-val')!.innerText = (document.getElementById('g-slider') as HTMLInputElement).value;
     document.getElementById('b-val')!.innerText = (document.getElementById('b-slider') as HTMLInputElement).value;
+    if (selectedSlot === 'bg') {
+      document.documentElement.style.setProperty('--bg', draftPalette.bg);
+    }
     refreshForgeUI();
   };
   rSlider.addEventListener('input', onSliderInput);
@@ -330,7 +358,7 @@ export function setupMenuListeners(): void {
     refreshForgeUI();
   });
 
-  // Store modal
+  // Shop modal
   storeBtn.addEventListener('click', () => {
     initAudio();
     (document.getElementById('ui-layer') as HTMLElement).style.display = 'none';
@@ -342,11 +370,17 @@ export function setupMenuListeners(): void {
 }
 
 function updateHapticsToggleText(): void {
-  const supported = !!navigator.vibrate;
   const btn = document.getElementById('haptics-toggle-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  btn.innerText = supported ? `Haptics: ${profile.settings.haptics ? 'On' : 'Off'}` : 'Haptics: Unsupported';
-  btn.disabled = !supported;
+  // iOS devices don't support navigator.vibrate — hide the button rather than
+  // showing "Unsupported", since that reads as a broken feature rather than N/A
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isIOS) { btn.style.display = 'none'; return; }
+  const supported = !!navigator.vibrate;
+  if (!supported) { btn.style.display = 'none'; return; }
+  btn.style.display = '';
+  btn.innerText = `Haptics: ${profile.settings.haptics ? 'On' : 'Off'}`;
+  btn.disabled = false;
 }
 
 // Re-export haptic so modals.ts can call it
