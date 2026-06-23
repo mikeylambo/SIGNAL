@@ -47,6 +47,7 @@ export function spawnScorePopup(cube: THREE.Mesh, amount: number, mult: number):
 
   const el = document.createElement('div');
   el.className = 'score-popup';
+  el.setAttribute('aria-hidden', 'true');
   el.textContent = mult > 1 ? `+${amount} ×${mult.toFixed(1)}` : `+${amount}`;
   el.style.left = x + 'px';
   el.style.top = y + 'px';
@@ -54,6 +55,9 @@ export function spawnScorePopup(cube: THREE.Mesh, amount: number, mult: number):
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('rise'));
   setTimeout(() => el.remove(), 700);
+
+  const announce = document.getElementById('sr-score-announce');
+  if (announce) announce.textContent = mult > 1 ? `+${amount}, ${mult.toFixed(1)}x combo` : `+${amount}`;
 }
 
 export function updateTimerUI(): void {
@@ -62,6 +66,7 @@ export function updateTimerUI(): void {
   const pct = Math.max(0, (state.timeLeft / state.totalTime) * 100);
   stressBar.style.width = pct + '%';
   stressBar.style.backgroundColor = pct > 50 ? 'var(--correct)' : pct > 20 ? 'var(--combo)' : 'var(--wrong)';
+  stressBar.setAttribute('aria-valuenow', String(Math.round(pct)));
 }
 
 export function updateStatsUI(): void {

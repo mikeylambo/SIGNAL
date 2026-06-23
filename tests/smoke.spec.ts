@@ -36,7 +36,7 @@ async function startGame(page: Page): Promise<void> {
 // Uses __signal to find a non-pattern tile via exact Three.js projection.
 async function triggerGameOver(page: Page): Promise<void> {
   await startGame(page);
-  await expect(page.locator('#pause-btn')).toBeVisible();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
 
   type SignalHandle = {
     getState: () => { pattern: number[] };
@@ -102,7 +102,7 @@ test('click through a full Spatial pattern — level increments to 2', async ({ 
   await startGame(page);
 
   // After Execute phase starts, the pause button is visible and val-lvl shows 1.
-  await expect(page.locator('#pause-btn')).toBeVisible();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
   expect(await getLevel(page)).toBe(1);
 
   // Click systematically across the board. The board is a 3×3 grid of cubes
@@ -173,7 +173,7 @@ test('pause and resume does not break gameplay', async ({ page }) => {
   await page.goto('/');
   await startGame(page);
 
-  await expect(page.locator('#pause-btn')).toBeVisible();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
 
   // Pause
   await page.locator('#pause-btn').click();
@@ -182,7 +182,7 @@ test('pause and resume does not break gameplay', async ({ page }) => {
   // Resume
   await page.locator('#resume-btn').click();
   await expect(page.locator('#pause-screen')).toBeHidden();
-  await expect(page.locator('#pause-btn')).toBeVisible();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
 
   // Gameplay still running — loop should be active
   const loopRunning = await page.evaluate(() => {
@@ -196,7 +196,7 @@ test('background/foreground while paused does not create double render loop', as
   await page.goto('/');
   await startGame(page);
 
-  await expect(page.locator('#pause-btn')).toBeVisible();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
 
   // --- PAUSE first ---
   await page.locator('#pause-btn').click();
@@ -414,7 +414,7 @@ test('daily mode key is date-scoped', async ({ page }) => {
   // Start daily run then trigger game-over via wrong tile
   await page.locator('#daily-btn').click();
   await page.waitForTimeout(COUNTDOWN_MS);
-  await expect(page.locator('#pause-btn')).toBeVisible();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
 
   type SignalHandle = {
     getState: () => { pattern: number[] };

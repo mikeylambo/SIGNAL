@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SIGNAL — Cognitive Calibration Engine</title>
+    <meta name="description" content="SIGNAL is a 3D cognitive training game. Master working memory across 5 protocols and 3 pacing modes with bloom lighting, haptics, and a daily leaderboard challenge.">
+    <meta property="og:title" content="SIGNAL — Cognitive Calibration Engine">
+    <meta property="og:description" content="A 3D memory training game with bloom lighting, haptics, and 5 cognitive protocols. Sharpen your working memory.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="SIGNAL — Cognitive Calibration Engine">
+    <meta name="twitter:description" content="A 3D memory training game with bloom lighting, haptics, and 5 cognitive protocols. Sharpen your working memory.">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -167,28 +175,33 @@
 </head>
 <body>
 
-    <div id="canvas-container"></div>
-    <div id="screen-flash"></div>
-    <div id="stress-bar-container" style="display:none;"><div id="stress-bar"></div></div>
+    <div id="canvas-container" aria-hidden="true"></div>
+    <div id="screen-flash" aria-hidden="true"></div>
+    <div id="stress-bar-container" style="display:none;" aria-hidden="true">
+        <div id="stress-bar" role="progressbar" aria-label="Time remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"></div>
+    </div>
 
-    <div id="countdown-overlay">3</div>
+    <!-- Screen-reader-only live region for score announcements -->
+    <div id="sr-score-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div>
+
+    <div id="countdown-overlay" aria-live="assertive" aria-atomic="true">3</div>
 
     <div id="ui-layer">
         <div class="header">
-            <div><h1>SIG<span class="h1-accent">NAL</span></h1></div>
+            <div><h1 aria-label="Signal">SIG<span class="h1-accent">NAL</span></h1></div>
             <div class="header-stats-col">
-                <div class="stats" id="stats-bar"></div>
-                <div id="combo-readout" style="display:none;">
+                <div class="stats" id="stats-bar" role="status" aria-live="polite" aria-label="Game stats"></div>
+                <div id="combo-readout" style="display:none;" aria-hidden="true">
                     <span class="combo-num">0</span><span class="combo-label">COMBO</span>
                 </div>
             </div>
-            <button id="pause-btn" class="icon-btn" style="display:none;">||</button>
+            <button id="pause-btn" class="icon-btn" style="display:none;" aria-label="Pause">||</button>
         </div>
 
         <div class="center-display" id="center-display">
             <div>
-                <div id="message">Standby</div>
-                <div class="sub-message" id="hint-message">Set protocol, then engage.</div>
+                <div id="message" role="status" aria-live="polite">Standby</div>
+                <div class="sub-message" id="hint-message" aria-live="polite">Set protocol, then engage.</div>
             </div>
 
             <button id="start-btn" style="margin-bottom: 10px;">Engage</button>
@@ -213,9 +226,9 @@
     </div>
 
     <!-- Operator Log Modal -->
-    <div id="profile-screen" class="modal-screen">
+    <div id="profile-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="profile-screen-title">
         <div class="modal-container" style="border-color: var(--correct);">
-            <h2 style="color: var(--correct);">Operator Log</h2>
+            <h2 id="profile-screen-title" style="color: var(--correct);">Operator Log</h2>
             <div class="final-stats">
                 <div class="stat-box"><span class="stat-label">Total Runs</span><span class="stat-value" id="prof-runs">0</span></div>
                 <div class="stat-box"><span class="stat-label">Lifetime Score</span><span class="stat-value" id="prof-score">0</span></div>
@@ -232,9 +245,9 @@
     </div>
 
     <!-- Calibration Modal -->
-    <div id="forge-screen" class="modal-screen">
+    <div id="forge-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="forge-screen-title">
         <div class="modal-container" style="border-color: var(--active);">
-            <h2 style="color: var(--active);">Calibrate Signal</h2>
+            <h2 id="forge-screen-title" style="color: var(--active);">Calibrate Signal</h2>
 
             <!-- Colorblind-safe presets — one-tap starting points to customize from -->
             <div style="margin-bottom: 14px;">
@@ -298,9 +311,9 @@
     </div>
 
     <!-- Exchange Modal -->
-    <div id="store-screen" class="modal-screen">
+    <div id="store-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="store-screen-title">
         <div class="modal-container" style="border-color: var(--currency);">
-            <h2 style="color: var(--currency);">Exchange</h2>
+            <h2 id="store-screen-title" style="color: var(--currency);">Exchange</h2>
             <div style="margin-bottom: 20px; font-family: var(--font-mono); font-size: 1.1rem; font-weight: bold; color: var(--currency);">
                 Signal Balance: <span id="store-frag-count">0</span>
             </div>
@@ -310,9 +323,9 @@
     </div>
 
     <!-- Pause Modal -->
-    <div id="pause-screen" class="modal-screen">
+    <div id="pause-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="pause-screen-title">
         <div class="modal-container">
-            <h2>Paused</h2>
+            <h2 id="pause-screen-title">Paused</h2>
             <div style="display: flex; flex-direction: column; gap: 15px;">
                 <button id="resume-btn">Resume</button>
                 <button id="pause-menu-btn" class="btn-small" style="background: rgba(255, 56, 100, 0.1); border-color: var(--wrong); color: var(--wrong);">Abort Run</button>
@@ -321,7 +334,7 @@
     </div>
 
     <!-- Results Modal -->
-    <div id="results-screen" class="modal-screen">
+    <div id="results-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="end-title">
         <div class="modal-container">
             <h2 id="end-title">Run Ended</h2>
             <div class="final-stats" id="final-stats-grid"></div>
@@ -352,13 +365,13 @@
     </div>
 
     <!-- Display Name Modal -->
-    <div id="display-name-modal" style="
+    <div id="display-name-modal" role="dialog" aria-modal="true" aria-labelledby="display-name-title" style="
         display:none; position:fixed; inset:0; z-index:50;
         background:var(--bg-modal); backdrop-filter:blur(20px);
         flex-direction:column; align-items:center; justify-content:center;
         padding:1.5rem; box-sizing:border-box;">
         <div class="modal-container" style="border-color:var(--active);">
-            <h2 style="color:var(--active);">Name Your Signal</h2>
+            <h2 id="display-name-title" style="color:var(--active);">Name Your Signal</h2>
             <p style="font-family:var(--font-mono); font-size:0.82rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.7;">
                 This name appears on leaderboards.<br>Choose carefully — it can't be changed.
             </p>
