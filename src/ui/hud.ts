@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { state } from '../state';
-import { getSignal } from '../save';
+import { getSignal, profile } from '../save';
 import { camera } from '../render/scene';
 import { PROTOCOLS, PACINGS } from '../game/protocols';
 
@@ -102,4 +102,7 @@ export function renderStatsBar(): void {
   if (state.isDailyRun)       html = `<div style="color:var(--wrong)">DAILY CALIBRATION</div><div>Lvl <span id="val-lvl">${state.level}</span></div><div>Pts <span id="val-score">${state.score}</span></div>`;
 
   statsBar.innerHTML = html;
+  if (profile.currentStreak >= 2) {
+    statsBar.innerHTML += `<div style="color:var(--combo);">${profile.currentStreak}🔥</div>`;
+  }
 }

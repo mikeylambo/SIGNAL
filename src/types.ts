@@ -32,6 +32,9 @@ export interface SavedProfile {
   hasSeenOnboarding: boolean;
   player_id: string;     // stable UUID generated once; used as leaderboard identity
   display_name: string;  // player-chosen name shown on the leaderboard
+  currentStreak: number;      // consecutive days with ≥1 completed run
+  longestStreak: number;      // all-time best streak
+  lastRunDate: string | null; // ISO date 'YYYY-MM-DD' of last completed run
   lastDailyDate: string | null;
   settings: {
     haptics: boolean;

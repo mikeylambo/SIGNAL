@@ -5,7 +5,7 @@ import { cubes, setCubeState, createBoard } from '../render/board';
 import { camera, spawnParticles } from '../render/scene';
 import { loopState, cameraShake, flashScreen } from '../render/loop';
 import { playTone, haptic } from '../audio';
-import { addSignal, recordRun, t, profile, saveProfile } from '../save';
+import { addSignal, recordRun, recordStreakForToday, t, profile, saveProfile } from '../save';
 import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI, updateStatsUI, renderStatsBar } from '../ui/hud';
 import { delay } from '../utils';
 import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
@@ -460,12 +460,16 @@ export async function showResultsScreen(): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
+  // Record streak before any DOM writes so the result informs the title override
+  const streakResult = recordStreakForToday();
+
   const uiLayer = document.getElementById('ui-layer')!;
   const centerDisplay = document.getElementById('center-display')!;
   const resultsScreen = document.getElementById('results-screen')!;
   const restartBtn = document.getElementById('restart-btn') as HTMLButtonElement;
   const resEarnedFrags = document.getElementById('res-earned-frags')!;
   const grid = document.getElementById('final-stats-grid')!;
+  const endTitle = document.getElementById('end-title')!;
 
   uiLayer.style.display = 'none';
   centerDisplay.style.display = 'none';
@@ -496,6 +500,33 @@ export async function showResultsScreen(): Promise<void> {
   } else if (pPace.id === 'sprint') {
     grid.innerHTML = `<div class="stat-box"><span class="stat-label">Clears</span><span class="stat-value">${state.clears}</span></div><div class="stat-box"><span class="stat-label">Score</span><span class="stat-value">${state.score}</span></div>${comboStat}`;
   }
+
+  // A. Milestone title override
+  if (streakResult.isMilestone) {
+    endTitle.innerText = `${streakResult.milestoneValue}-DAY STREAK`;
+    endTitle.style.color = 'var(--combo)';
+  }
+
+  // B. Streak line
+  const streakLineEl = document.getElementById('streak-line')!;
+  if (streakResult.currentStreak >= 2) {
+    streakLineEl.style.display = 'block';
+    const flame = streakResult.isMilestone ? ' 🔥' : '';
+    streakLineEl.textContent = `${streakResult.currentStreak}-day streak${flame}`;
+    streakLineEl.style.color = streakResult.isNewRecord ? 'var(--correct)' : 'var(--combo)';
+  } else {
+    streakLineEl.style.display = 'none';
+  }
+
+  // C. Daily nudge
+  const today = new Date().toISOString().split('T')[0];
+  const nudgeEl = document.getElementById('daily-nudge')!;
+  if (profile.lastDailyDate === today) {
+    nudgeEl.textContent = `◆ Streak: ${streakResult.currentStreak} day${streakResult.currentStreak !== 1 ? 's' : ''} · Next window opens tomorrow`;
+  } else {
+    nudgeEl.textContent = `◆ Daily Calibration available — play it to lock in your streak`;
+  }
+  nudgeEl.style.display = 'block';
 
   // Build the board key for this run
   const boardKey = state.isDailyRun

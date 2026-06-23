@@ -221,6 +221,8 @@
                 <div class="stat-box"><span class="stat-label">Lifetime Score</span><span class="stat-value" id="prof-score">0</span></div>
                 <div class="stat-box"><span class="stat-label">Highest Level</span><span class="stat-value" id="prof-level">1</span></div>
                 <div class="stat-box"><span class="stat-label">Signal Earned</span><span class="stat-value" id="prof-frags" style="color: var(--currency);">0</span></div>
+                <div class="stat-box"><span class="stat-label">Current Streak</span><span class="stat-value" id="prof-streak" style="color:var(--combo);">0</span></div>
+                <div class="stat-box"><span class="stat-label">Best Streak</span><span class="stat-value" id="prof-best-streak" style="color:var(--combo);">0</span></div>
             </div>
             <button id="haptics-toggle-btn" class="btn-small" style="margin-bottom: 10px;">Haptics: On</button>
             <button id="reduced-motion-btn" class="btn-small" style="margin-bottom: 10px;">Motion: Full</button>
@@ -326,11 +328,22 @@
             <div style="color: var(--currency); font-weight: bold; margin-bottom: 1.5rem; font-family: var(--font-mono); font-size: 1.2rem;" id="frag-payout-box">
                 +<span id="res-earned-frags">0</span> SIGNAL
             </div>
+            <div id="streak-line" style="
+                display:none;
+                font-family:var(--font-mono); font-size:1rem; font-weight:700;
+                color:var(--combo); margin-bottom:0.75rem; letter-spacing:1px;"></div>
+
             <div id="leaderboard-panel" style="margin-top:1.5rem; text-align:left;">
                 <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-muted); letter-spacing:1px; margin-bottom:8px;">LEADERBOARD</div>
                 <div id="leaderboard-title" style="font-family:var(--font-display); font-size:0.78rem; color:var(--active); margin-bottom:10px; letter-spacing:1.5px; text-transform:uppercase;"></div>
                 <div id="leaderboard-body" style="max-height:200px; overflow-y:auto; border:1px solid rgba(255,255,255,0.06); border-radius:3px; background:rgba(0,0,0,0.3);"></div>
             </div>
+            <div id="daily-nudge" style="
+                display:none;
+                font-family:var(--font-mono); font-size:0.72rem;
+                color:var(--text-muted); margin-top:1rem; margin-bottom:0.25rem;
+                letter-spacing:0.5px; line-height:1.6; text-align:center;"></div>
+
             <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 1.5rem;">
                 <button id="restart-btn">Run Again</button>
                 <button id="menu-btn" class="btn-small">Menu</button>

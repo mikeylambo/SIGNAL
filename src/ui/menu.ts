@@ -269,6 +269,10 @@ export function setupMenuListeners(): void {
     (document.getElementById('prof-score') as HTMLElement).innerText = String(profile.lifetime.score);
     (document.getElementById('prof-level') as HTMLElement).innerText = String(profile.lifetime.highestLevel);
     (document.getElementById('prof-frags') as HTMLElement).innerText = String(profile.lifetime.signalMined);
+    const profStreak = document.getElementById('prof-streak');
+    const profBestStreak = document.getElementById('prof-best-streak');
+    if (profStreak) profStreak.innerText = String(profile.currentStreak);
+    if (profBestStreak) profBestStreak.innerText = String(profile.longestStreak);
     updateHapticsToggleText();
     updateReducedMotionText();
   });

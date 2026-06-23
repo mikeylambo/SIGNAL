@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -31,6 +31,9 @@ const SaveSystem = (() => {
       hasSeenOnboarding: false,
       player_id: crypto.randomUUID(),
       display_name: '',
+      currentStreak: 0,
+      longestStreak: 0,
+      lastRunDate: null,
       lastDailyDate: null,
       settings: { haptics: true, sfx: true },
     };
@@ -58,6 +61,13 @@ const SaveSystem = (() => {
       raw.player_id = crypto.randomUUID();
       raw.display_name = '';
       raw.schemaVersion = 4;
+    }
+    if (raw.schemaVersion < 5) {
+      // v4 → v5: streak tracking; existing players start fresh from today
+      raw.currentStreak = 0;
+      raw.longestStreak = 0;
+      raw.lastRunDate = null;
+      raw.schemaVersion = 5;
     }
     return raw;
   }
@@ -101,6 +111,59 @@ export function recordRun({ score, level, signalEarned, combo }: { score: number
   if (level > l.highestLevel) l.highestLevel = level;
   if (combo > l.bestCombo) l.bestCombo = combo;
   saveProfile();
+}
+
+// ── Streak tracking ────────────────────────────────────────────────────────────
+
+export interface StreakResult {
+  currentStreak: number;
+  longestStreak: number;
+  isNewRecord: boolean;
+  isMilestone: boolean;
+  milestoneValue: number | null;
+}
+
+const STREAK_MILESTONES = [3, 7, 14, 30, 60, 100] as const;
+
+export function recordStreakForToday(): StreakResult {
+  const today = new Date().toISOString().split('T')[0];
+
+  if (profile.lastRunDate === today) {
+    // Already counted today — return current values unchanged
+    return {
+      currentStreak: profile.currentStreak,
+      longestStreak: profile.longestStreak,
+      isNewRecord: false,
+      isMilestone: false,
+      milestoneValue: null,
+    };
+  }
+
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
+  })();
+
+  if (profile.lastRunDate === yesterday) {
+    profile.currentStreak++;
+  } else {
+    profile.currentStreak = 1;
+  }
+
+  const isNewRecord = profile.currentStreak > profile.longestStreak;
+  if (isNewRecord) profile.longestStreak = profile.currentStreak;
+  profile.lastRunDate = today;
+  saveProfile();
+
+  const isMilestone = (STREAK_MILESTONES as ReadonlyArray<number>).includes(profile.currentStreak);
+  return {
+    currentStreak: profile.currentStreak,
+    longestStreak: profile.longestStreak,
+    isNewRecord,
+    isMilestone,
+    milestoneValue: isMilestone ? profile.currentStreak : null,
+  };
 }
 
 // Themes — built after profile is loaded so custom theme reads profile.customPalette.

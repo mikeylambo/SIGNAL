@@ -8,6 +8,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Streak & habit loop** (schema v5):
+  - `currentStreak`, `longestStreak`, `lastRunDate` added to `SavedProfile`; v4→v5
+    migration sets all three to zero/null so existing players start a fresh streak
+    from today without losing any other data.
+  - `recordStreakForToday()` in `save.ts` — idempotent (safe to call multiple times
+    in one day), handles first run, continuation, and gap-day reset. Returns
+    `StreakResult` with `isNewRecord` and `isMilestone` flags.
+  - Milestone titles: on days 3, 7, 14, 30, 60, 100 the results-screen `#end-title`
+    is overridden to `"N-DAY STREAK"` in `var(--combo)` gold.
+  - `#streak-line` in the results screen shows `"N-day streak"` (hidden on day 1);
+    turns `var(--correct)` green when a new personal best is set.
+  - `#daily-nudge` below the leaderboard panel: tells the player whether the Daily
+    Calibration is still available or already done, always visible after a run.
+  - Streak badge in the stats bar (`N🔥`) when `currentStreak ≥ 2`.
+  - Operator Log modal shows two new stat boxes: Current Streak and Best Streak.
+  - Two new smoke tests: streak increments from yesterday's run; streak resets after
+    a gap day while preserving `longestStreak`. Tests use `__signal.getCubeScreenPos`
+    to click a guaranteed-wrong tile (deterministic game-over, no timer dependency).
 - **Leaderboard UI** (wired end-to-end on the results screen):
   - First-run display name prompt: `#display-name-modal` appears after the first game
     ends. Player enters a callsign (1–20 chars); Skip skips the name and suppresses

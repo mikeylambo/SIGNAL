@@ -7,7 +7,7 @@ const COUNTDOWN_MS = 4000;
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('sig_profile_v1', JSON.stringify({
-      schemaVersion: 4,
+      schemaVersion: 5,
       signal: 0,
       unlockedCalibrations: ['mono', 'custom'],
       currentCalibration: 'mono',
@@ -16,6 +16,9 @@ test.beforeEach(async ({ page }) => {
       hasSeenOnboarding: true,
       player_id: '00000000-0000-0000-0000-000000000001',
       display_name: 'TestPlayer',
+      currentStreak: 0,
+      longestStreak: 0,
+      lastRunDate: null,
       lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
       lastDailyDate: null,
       settings: { haptics: true, sfx: true },
@@ -27,6 +30,36 @@ async function startGame(page: Page): Promise<void> {
   await page.locator('#start-btn').click();
   // Wait for countdown to finish and Execute phase to begin
   await page.waitForTimeout(COUNTDOWN_MS);
+}
+
+// Reach results screen by clicking a guaranteed-wrong tile (not in pattern).
+// Uses __signal to find a non-pattern tile via exact Three.js projection.
+async function triggerGameOver(page: Page): Promise<void> {
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible();
+
+  type SignalHandle = {
+    getState: () => { pattern: number[] };
+    getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
+  };
+  const wrongPos = await page.evaluate(() => {
+    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
+    if (!sig) return null;
+    const { pattern } = sig.getState();
+    for (let i = 0; i < 9; i++) {
+      if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
+    }
+    return null;
+  });
+
+  if (wrongPos) {
+    await page.mouse.click(wrongPos.x, wrongPos.y);
+  } else {
+    const box = await page.locator('canvas').boundingBox();
+    if (box) await page.mouse.click(box.x + 2, box.y + 2);
+  }
+
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 4000 });
 }
 
 // Returns the level shown in the HUD (val-lvl element).
@@ -264,30 +297,83 @@ test('daily calibration button is present and functional', async ({ page }) => {
 
 test('results screen shows leaderboard panel after a run', async ({ page }) => {
   await page.goto('/');
-  await startGame(page);
-
-  // Wait for Execute phase
-  await expect(page.locator('#pause-btn')).toBeVisible();
-
-  // Click 9 positions across the canvas — some will be wrong, triggering gameOver
-  const canvas = page.locator('canvas');
-  const box = await canvas.boundingBox();
-  if (box) {
-    for (let i = 0; i < 3; i++) {
-      for (let j = 0; j < 3; j++) {
-        await page.mouse.click(
-          box.x + (box.width / 3) * (i + 0.5),
-          box.y + (box.height / 3) * (j + 0.5)
-        );
-        await page.waitForTimeout(100);
-      }
-    }
-  }
-
-  // gameOver has cameraShake(500ms) + setTimeout(500ms) before showResultsScreen
-  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 4000 });
+  await triggerGameOver(page);
   // Leaderboard panel must be present in DOM
   await expect(page.locator('#leaderboard-panel')).toBeVisible({ timeout: 6000 });
   // Leaderboard body must contain content (skeleton or rows or empty-state message)
   await expect(page.locator('#leaderboard-body')).not.toBeEmpty({ timeout: 8000 });
+});
+
+test('streak increments after a completed run reaches results screen', async ({ page }) => {
+  await page.addInitScript(() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yStr = yesterday.toISOString().split('T')[0];
+    localStorage.setItem('sig_profile_v1', JSON.stringify({
+      schemaVersion: 5,
+      signal: 0,
+      unlockedCalibrations: ['mono', 'custom'],
+      currentCalibration: 'mono',
+      customHex: '#00E5FF',
+      customPalette: { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' },
+      hasSeenOnboarding: true,
+      player_id: 'test-player-streak',
+      display_name: 'StreakTest',
+      currentStreak: 3,
+      longestStreak: 3,
+      lastRunDate: yStr,
+      lifetime: { runs: 5, score: 500, highestLevel: 3, signalMined: 50, bestCombo: 8 },
+      lastDailyDate: null,
+      settings: { haptics: false, sfx: true },
+    }));
+  });
+
+  await page.goto('/');
+  await triggerGameOver(page);
+
+  // Streak should now be 4 (was 3, last run was yesterday)
+  await expect(page.locator('#streak-line')).toBeVisible({ timeout: 2000 });
+  const streakText = await page.locator('#streak-line').textContent();
+  expect(streakText).toContain('4');
+
+  // Daily nudge should always be visible
+  await expect(page.locator('#daily-nudge')).toBeVisible();
+});
+
+test('streak resets after a gap day', async ({ page }) => {
+  await page.addInitScript(() => {
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    const dStr = twoDaysAgo.toISOString().split('T')[0];
+    localStorage.setItem('sig_profile_v1', JSON.stringify({
+      schemaVersion: 5,
+      signal: 0,
+      unlockedCalibrations: ['mono', 'custom'],
+      currentCalibration: 'mono',
+      customHex: '#00E5FF',
+      customPalette: { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' },
+      hasSeenOnboarding: true,
+      player_id: 'test-player-gap',
+      display_name: 'GapTest',
+      currentStreak: 10,
+      longestStreak: 10,
+      lastRunDate: dStr,
+      lifetime: { runs: 10, score: 1000, highestLevel: 5, signalMined: 100, bestCombo: 12 },
+      lastDailyDate: null,
+      settings: { haptics: false, sfx: true },
+    }));
+  });
+
+  await page.goto('/');
+  await triggerGameOver(page);
+
+  // streak reset to 1 — streak-line should be hidden (day 1 doesn't show)
+  await expect(page.locator('#streak-line')).toBeHidden({ timeout: 2000 });
+
+  // longestStreak must be preserved in localStorage despite the reset
+  const longestStreak = await page.evaluate(() => {
+    const saved = localStorage.getItem('sig_profile_v1');
+    return saved ? (JSON.parse(saved) as { longestStreak: number }).longestStreak : null;
+  });
+  expect(longestStreak).toBe(10);
 });
