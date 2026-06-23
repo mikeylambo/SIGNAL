@@ -1,5 +1,6 @@
 import { getClient } from '../lib/supabase';
 import { profile, saveProfile } from '../save';
+import type { LeaderboardRow } from '../types';
 
 // ── Board key helpers ──────────────────────────────────────────────────────────
 
@@ -11,16 +12,6 @@ export function modeBoardKey(protocol: string, pacing: string): string {
 /** e.g. "daily:2026-06-22" */
 export function dailyBoardKey(date: string): string {
   return `daily:${date}`;
-}
-
-// ── Leaderboard entry type ─────────────────────────────────────────────────────
-
-export interface LeaderboardEntry {
-  rank: number;
-  display_name: string;
-  score: number;
-  level_reached: number | null;
-  player_id: string;
 }
 
 // ── Client-side profanity filter ───────────────────────────────────────────────
@@ -38,7 +29,7 @@ function containsProfanity(name: string): boolean {
   return BLOCKED_WORDS.some(w => normalised.includes(w));
 }
 
-// ── Display name helper (for console testing) ──────────────────────────────────
+// ── Display name helper ────────────────────────────────────────────────────────
 
 /** Sets the player's display name and persists it to the save file. */
 export function setDisplayName(name: string): void {
@@ -98,12 +89,12 @@ export async function submitScore(
 export async function fetchBoard(
   boardKey: string,
   limit = 10,
-): Promise<LeaderboardEntry[]> {
+): Promise<LeaderboardRow[]> {
   try {
     const supabase = getClient();
     const { data, error } = await supabase
       .from('leaderboard_scores')
-      .select('display_name, score, level_reached, player_id')
+      .select('display_name, score, player_id, created_at')
       .eq('board_key', boardKey)
       .order('score', { ascending: false })
       .limit(limit);
@@ -111,11 +102,11 @@ export async function fetchBoard(
     if (error) throw error;
 
     return (data ?? []).map((row, i) => ({
-      rank:          i + 1,
-      display_name:  row.display_name as string,
-      score:         row.score as number,
-      level_reached: row.level_reached as number | null,
-      player_id:     row.player_id as string,
+      rank:         i + 1,
+      display_name: row.display_name as string,
+      score:        row.score as number,
+      player_id:    row.player_id as string,
+      achieved_at:  row.created_at as string,
     }));
   } catch (err) {
     console.warn('[leaderboard] fetchBoard failed:', err);

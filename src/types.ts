@@ -57,6 +57,14 @@ export interface Theme {
   edge: number;
 }
 
+export interface LeaderboardRow {
+  rank: number;
+  display_name: string;
+  score: number;
+  player_id: string;
+  achieved_at: string;  // ISO timestamp (maps to created_at in DB)
+}
+
 export interface Protocol {
   id: string;
   name: string;

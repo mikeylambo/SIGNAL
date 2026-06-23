@@ -8,6 +8,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Leaderboard UI** (wired end-to-end on the results screen):
+  - First-run display name prompt: `#display-name-modal` appears after the first game
+    ends. Player enters a callsign (1–20 chars); Skip skips the name and suppresses
+    score submission. Name is stored in `profile.display_name` and never prompted again.
+  - Score auto-submitted to Supabase via `submitScore()` (fire-and-forget) after each
+    run, but only when a display name has been set.
+  - Leaderboard panel (`#leaderboard-panel`) rendered inside the results screen below
+    the SIGNAL payout. Shows skeleton rows immediately, fills with live board data once
+    the fetch resolves. Handles network failures silently (shows error text, never crashes).
+  - Player's own row highlighted in `var(--active)` with a left-border accent.
+  - Board key is mode-specific (`mode:spatial:classic`) or `daily:YYYY-MM-DD` for the
+    daily calibration run.
+  - Skeleton animation respects `isReducedMotion()` — static bars when reduced motion
+    is on.
+  - `window.__signal.leaderboard` debug shim removed now that the UI is wired.
+  - `LeaderboardRow` interface added to `types.ts`; `fetchBoard()` updated to select
+    `created_at` and expose it as `achieved_at`.
 - **Leaderboard data layer** (backend plumbing, no UI yet):
   - `@supabase/supabase-js` installed; lazy `getClient()` in `src/lib/supabase.ts` —
     throws a clear error only when actually called, so the game runs fine without env vars.

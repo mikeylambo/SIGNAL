@@ -261,3 +261,33 @@ test('daily calibration button is present and functional', async ({ page }) => {
     await expect(page.locator('#countdown-overlay')).toBeVisible();
   }
 });
+
+test('results screen shows leaderboard panel after a run', async ({ page }) => {
+  await page.goto('/');
+  await startGame(page);
+
+  // Wait for Execute phase
+  await expect(page.locator('#pause-btn')).toBeVisible();
+
+  // Click 9 positions across the canvas — some will be wrong, triggering gameOver
+  const canvas = page.locator('canvas');
+  const box = await canvas.boundingBox();
+  if (box) {
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        await page.mouse.click(
+          box.x + (box.width / 3) * (i + 0.5),
+          box.y + (box.height / 3) * (j + 0.5)
+        );
+        await page.waitForTimeout(100);
+      }
+    }
+  }
+
+  // gameOver has cameraShake(500ms) + setTimeout(500ms) before showResultsScreen
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 4000 });
+  // Leaderboard panel must be present in DOM
+  await expect(page.locator('#leaderboard-panel')).toBeVisible({ timeout: 6000 });
+  // Leaderboard body must contain content (skeleton or rows or empty-state message)
+  await expect(page.locator('#leaderboard-body')).not.toBeEmpty({ timeout: 8000 });
+});

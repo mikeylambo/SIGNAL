@@ -153,6 +153,8 @@
         input[type=range] { width: 100%; cursor: pointer; accent-color: var(--active); }
         .forge-label { font-weight: bold; display: flex; justify-content: space-between; font-size: 0.9rem;}
 
+        @keyframes lbPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
+
         @media (max-width: 768px) {
             #ui-layer { padding: 1rem; }
             .header { flex-direction: column; align-items: center; gap: 0.8rem; }
@@ -324,9 +326,38 @@
             <div style="color: var(--currency); font-weight: bold; margin-bottom: 1.5rem; font-family: var(--font-mono); font-size: 1.2rem;" id="frag-payout-box">
                 +<span id="res-earned-frags">0</span> SIGNAL
             </div>
-            <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div id="leaderboard-panel" style="margin-top:1.5rem; text-align:left;">
+                <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-muted); letter-spacing:1px; margin-bottom:8px;">LEADERBOARD</div>
+                <div id="leaderboard-title" style="font-family:var(--font-display); font-size:0.78rem; color:var(--active); margin-bottom:10px; letter-spacing:1.5px; text-transform:uppercase;"></div>
+                <div id="leaderboard-body" style="max-height:200px; overflow-y:auto; border:1px solid rgba(255,255,255,0.06); border-radius:3px; background:rgba(0,0,0,0.3);"></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 1.5rem;">
                 <button id="restart-btn">Run Again</button>
                 <button id="menu-btn" class="btn-small">Menu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Display Name Modal -->
+    <div id="display-name-modal" style="
+        display:none; position:fixed; inset:0; z-index:50;
+        background:var(--bg-modal); backdrop-filter:blur(20px);
+        flex-direction:column; align-items:center; justify-content:center;
+        padding:1.5rem; box-sizing:border-box;">
+        <div class="modal-container" style="border-color:var(--active);">
+            <h2 style="color:var(--active);">Name Your Signal</h2>
+            <p style="font-family:var(--font-mono); font-size:0.82rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.7;">
+                This name appears on leaderboards.<br>Choose carefully — it can't be changed.
+            </p>
+            <input id="display-name-input" type="text" maxlength="20" placeholder="enter callsign"
+                style="width:100%; box-sizing:border-box; padding:12px 14px;
+                    background:rgba(0,0,0,0.5); border:1px solid var(--active);
+                    border-radius:3px; color:var(--text); font-family:var(--font-mono);
+                    font-size:0.95rem; margin-bottom:1rem; outline:none;" />
+            <div id="display-name-error" style="display:none; color:var(--wrong); font-family:var(--font-mono); font-size:0.75rem; margin-bottom:1rem;"></div>
+            <div style="display:flex; gap:10px;">
+                <button id="display-name-confirm" style="background:var(--active); color:#001016; border-color:var(--active); font-weight:800;">Confirm</button>
+                <button id="display-name-skip" class="btn-small" style="color:var(--text-muted); border-color:rgba(255,255,255,0.12);">Skip</button>
             </div>
         </div>
     </div>

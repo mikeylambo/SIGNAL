@@ -9,7 +9,6 @@ import { cubes, setCubeState, createBoard } from './render/board';
 import type { CubeUserData } from './types';
 import { initErrorBoundary, showFatalError } from './errorBoundary';
 import { startOnboarding as replayOnboarding } from './ui/onboarding';
-import { submitScore, fetchBoard, modeBoardKey, dailyBoardKey, setDisplayName } from './game/leaderboard';
 import { returnToMenu } from './ui/modals';
 import * as THREE from 'three';
 
@@ -92,8 +91,5 @@ window.addEventListener('load', () => {
         y: rect.top + (1 - (ndc.y + 1) / 2) * rect.height,
       };
     },
-    // TEMPORARY — for console-testing the leaderboard data layer before UI wiring.
-    // Remove once the leaderboard UI is built.
-    leaderboard: { submitScore, fetchBoard, modeBoardKey, dailyBoardKey, setDisplayName },
   };
 });

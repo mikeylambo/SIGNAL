@@ -8,6 +8,8 @@ import { playTone, haptic } from '../audio';
 import { addSignal, recordRun, t, profile, saveProfile } from '../save';
 import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI, updateStatsUI, renderStatsBar } from '../ui/hud';
 import { delay } from '../utils';
+import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
+import { promptDisplayName, showLeaderboardPanel } from '../ui/leaderboard';
 
 // isTouchDevice / hitstopScale — duplicated from input.ts to avoid circular deps
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -454,7 +456,7 @@ export function gameOver(reasonText: string): void {
   });
 }
 
-export function showResultsScreen(): void {
+export async function showResultsScreen(): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
@@ -494,4 +496,28 @@ export function showResultsScreen(): void {
   } else if (pPace.id === 'sprint') {
     grid.innerHTML = `<div class="stat-box"><span class="stat-label">Clears</span><span class="stat-value">${state.clears}</span></div><div class="stat-box"><span class="stat-label">Score</span><span class="stat-value">${state.score}</span></div>${comboStat}`;
   }
+
+  // Build the board key for this run
+  const boardKey = state.isDailyRun
+    ? dailyBoardKey(new Date().toISOString().split('T')[0])
+    : modeBoardKey(pMode.id, pPace.id);
+
+  // a. Display name — prompt on first run only
+  if (!profile.display_name) {
+    const name = await promptDisplayName();
+    if (name) {
+      profile.display_name = name;
+      saveProfile();
+    }
+  }
+
+  // b. Submit score — fire-and-forget; board loads regardless of outcome
+  if (profile.display_name) {
+    submitScore(boardKey, state.score, state.level, pMode.id, pPace.id).catch(err => {
+      console.warn('[SIGNAL] leaderboard submit failed', err);
+    });
+  }
+
+  // c. Leaderboard panel — skeleton shows immediately inside showLeaderboardPanel
+  await showLeaderboardPanel(boardKey);
 }
