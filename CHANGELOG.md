@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Daily leaderboard mode key** was `"daily"` (a single shared bucket for all
+  dates); changed to `"daily_YYYY-MM-DD"` so each day's daily challenge has its
+  own isolated leaderboard. Standard mode keys changed from `"mode:spatial:classic"`
+  (colon-separated with `"mode:"` prefix) to `"spatial_classic"` (underscore, no
+  prefix) to match the title-formatter's expectations.
+- **Leaderboard title** now shows human-readable text: `"DAILY · JUN 22"` for daily
+  runs and `"SPATIAL · CLASSIC"` for standard runs. Previously used a broken
+  colon-split fallback. Date parsing uses `T00:00:00` suffix to force local-time
+  interpretation and avoid off-by-one in negative-UTC-offset timezones.
+
 ### Added
 - **Streak & habit loop** (schema v5):
   - `currentStreak`, `longestStreak`, `lastRunDate` added to `SavedProfile`; v4→v5

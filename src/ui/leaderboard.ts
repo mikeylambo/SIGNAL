@@ -61,11 +61,8 @@ export function promptDisplayName(): Promise<string | null> {
 
 export async function showLeaderboardPanel(mode: string): Promise<void> {
   const body  = document.getElementById('leaderboard-body')!;
-  const title = document.getElementById('leaderboard-title')!;
-
-  title.textContent = mode.startsWith('daily:')
-    ? 'Daily Challenge'
-    : mode.replace('mode:', '').replace(':', ' · ').toUpperCase();
+  const titleEl = document.getElementById('leaderboard-title');
+  if (titleEl) titleEl.textContent = formatModeTitle(mode);
 
   // Skeleton renders synchronously before the await so the panel fills immediately
   body.innerHTML = buildSkeleton();
@@ -76,6 +73,21 @@ export async function showLeaderboardPanel(mode: string): Promise<void> {
   } catch {
     body.innerHTML = '<div style="padding:12px;font-family:var(--font-mono);font-size:0.78rem;color:var(--text-muted);">Could not load leaderboard.</div>';
   }
+}
+
+// "daily_2026-06-22" → "DAILY · JUN 22"
+// "spatial_classic"  → "SPATIAL · CLASSIC"
+function formatModeTitle(mode: string): string {
+  if (mode.startsWith('daily_')) {
+    const dateStr = mode.slice(6); // '2026-06-22'
+    // Append T00:00:00 to force local-time parsing (bare date strings parse as UTC)
+    const date = new Date(dateStr + 'T00:00:00');
+    const formatted = date.toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric',
+    }).toUpperCase();
+    return `DAILY · ${formatted}`;
+  }
+  return mode.split('_').map(s => s.toUpperCase()).join(' · ');
 }
 
 function buildSkeleton(): string {

@@ -377,3 +377,64 @@ test('streak resets after a gap day', async ({ page }) => {
   });
   expect(longestStreak).toBe(10);
 });
+
+test('leaderboard title shows correct format for standard modes', async ({ page }) => {
+  await page.goto('/');
+  await triggerGameOver(page);
+
+  await expect(page.locator('#leaderboard-panel')).toBeVisible({ timeout: 6000 });
+  // Default protocol is Spatial, pacing is Classic → key 'spatial_classic' → 'SPATIAL · CLASSIC'
+  const title = await page.locator('#leaderboard-title').textContent({ timeout: 3000 });
+  expect(title).toBe('SPATIAL · CLASSIC');
+});
+
+test('daily mode key is date-scoped', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('sig_profile_v1', JSON.stringify({
+      schemaVersion: 5,
+      signal: 0,
+      unlockedCalibrations: ['mono', 'custom'],
+      currentCalibration: 'mono',
+      customHex: '#00E5FF',
+      customPalette: { base: '#1C2733', active: '#00E5FF', correct: '#39FF88',
+                       wrong: '#FF3864', bg: '#05080D' },
+      hasSeenOnboarding: true,
+      player_id: 'test-daily-key',
+      display_name: 'DailyTest',
+      currentStreak: 1,
+      longestStreak: 1,
+      lastRunDate: null,
+      lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
+      lastDailyDate: null,
+      settings: { haptics: false, sfx: true },
+    }));
+  });
+
+  await page.goto('/');
+  // Start daily run then trigger game-over via wrong tile
+  await page.locator('#daily-btn').click();
+  await page.waitForTimeout(COUNTDOWN_MS);
+  await expect(page.locator('#pause-btn')).toBeVisible();
+
+  type SignalHandle = {
+    getState: () => { pattern: number[] };
+    getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
+  };
+  const wrongPos = await page.evaluate(() => {
+    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
+    if (!sig) return null;
+    const { pattern } = sig.getState();
+    for (let i = 0; i < 9; i++) {
+      if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
+    }
+    return null;
+  });
+  if (wrongPos) await page.mouse.click(wrongPos.x, wrongPos.y);
+
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 4000 });
+  await expect(page.locator('#leaderboard-panel')).toBeVisible({ timeout: 6000 });
+
+  // Title should be 'DAILY · MMM D' format
+  const title = await page.locator('#leaderboard-title').textContent({ timeout: 3000 });
+  expect(title).toMatch(/^DAILY · [A-Z]{3} \d{1,2}$/);
+});

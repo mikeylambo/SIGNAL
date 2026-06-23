@@ -4,14 +4,14 @@ import type { LeaderboardRow } from '../types';
 
 // ── Board key helpers ──────────────────────────────────────────────────────────
 
-/** e.g. "mode:spatial:classic" */
+/** e.g. "spatial_classic" */
 export function modeBoardKey(protocol: string, pacing: string): string {
-  return `mode:${protocol}:${pacing}`;
+  return `${protocol}_${pacing}`;
 }
 
-/** e.g. "daily:2026-06-22" */
+/** e.g. "daily_2026-06-22" */
 export function dailyBoardKey(date: string): string {
-  return `daily:${date}`;
+  return `daily_${date}`;
 }
 
 // ── Client-side profanity filter ───────────────────────────────────────────────
