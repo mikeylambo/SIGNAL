@@ -1,15 +1,14 @@
 import { initScene, scene, pLight, gridFloor, camera, renderer } from './render/scene';
 import { startRenderLoop, stopRenderLoop, isLoopRunning } from './render/loop';
 import { state } from './state';
-import { applyTheme, currentThemeKey, t, setThemeChangeCallback } from './save';
+import { applyTheme, currentThemeKey, t, setThemeChangeCallback, profile, saveProfile } from './save';
 import { updateMenuText, setupMenuListeners } from './ui/menu';
-import { setupModalListeners } from './ui/modals';
+import { setupModalListeners, returnToMenu } from './ui/modals';
 import { onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchMove, onWindowResize } from './input';
 import { cubes, setCubeState, createBoard } from './render/board';
 import type { CubeUserData } from './types';
 import { initErrorBoundary, showFatalError } from './errorBoundary';
-import { startOnboarding as replayOnboarding } from './ui/onboarding';
-import { returnToMenu } from './ui/modals';
+import { startOnboardingRound } from './game/runLoop';
 import * as THREE from 'three';
 
 initErrorBoundary();
@@ -56,8 +55,11 @@ window.addEventListener('load', () => {
   setupModalListeners();
 
   document.getElementById('replay-intro-btn')!.addEventListener('click', () => {
+    profile.hasCompletedOnboarding = false;
+    profile.hasSeenOnboarding = false;
+    saveProfile();
     returnToMenu();
-    replayOnboarding();
+    void startOnboardingRound();
   });
 
   // Input listeners

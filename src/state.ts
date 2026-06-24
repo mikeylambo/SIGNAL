@@ -31,4 +31,5 @@ export const state = {
   wasTimerActiveBeforePause: false,
   curProtIdx: 0,
   curPaceIdx: 0,
+  isOnboarding: false,
 };

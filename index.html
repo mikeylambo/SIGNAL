@@ -106,12 +106,11 @@
 
         /* #message is a floating gameplay overlay — hidden during menu via opacity */
         #message {
-            position: absolute; top: calc(50% - 80px); left: 50%;
-            transform: translateX(-50%);
-            font-family: var(--font-display); font-size: 1.25rem; font-weight: 700;
+            position: absolute; top: 72px; left: 0; right: 0;
+            font-family: var(--font-display); font-size: 1.1rem; font-weight: 700;
             letter-spacing: 2px; text-transform: uppercase; text-align: center;
             transition: color 0.3s, opacity 0.2s; opacity: 0;
-            white-space: nowrap; pointer-events: none;
+            white-space: nowrap; pointer-events: none; z-index: 12;
         }
 
         button {
@@ -213,10 +212,11 @@
 
         <!-- Floating hint — sits just above the sheet, hidden during gameplay -->
         <div id="controls-hint" style="
-            position:absolute; bottom:300px; left:0; right:0;
+            position:absolute; bottom:296px; left:0; right:0;
             text-align:center; pointer-events:none;
             font-family:var(--font-mono); font-size:0.72rem;
-            color:var(--text-muted); letter-spacing:1px;">
+            color:var(--text-muted); letter-spacing:1px;
+            padding:0 1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
             Drag to rotate · Tap to select · Pinch to zoom
         </div>
 
@@ -432,6 +432,7 @@
                 letter-spacing:0.5px; line-height:1.6; text-align:center;"></div>
 
             <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 1.5rem;">
+                <button id="enter-signal-btn" style="display:none;">Enter SIGNAL →</button>
                 <button id="restart-btn">Run Again</button>
                 <button id="menu-btn" class="btn-small">Menu</button>
             </div>
@@ -449,7 +450,7 @@
             <p style="font-family:var(--font-mono); font-size:0.82rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.7;">
                 This name appears on leaderboards.
             </p>
-            <input id="display-name-input" type="text" maxlength="20" placeholder="enter callsign"
+            <input id="display-name-input" type="text" maxlength="20" placeholder="enter name"
                 style="width:100%; box-sizing:border-box; padding:12px 14px;
                     background:rgba(0,0,0,0.5); border:1px solid var(--active);
                     border-radius:3px; color:var(--text); font-family:var(--font-mono);

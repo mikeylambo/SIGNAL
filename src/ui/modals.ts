@@ -6,6 +6,13 @@ import { updateComboUI, showMessage, renderStatsBar } from './hud';
 import { resetAnimTime, loopState } from '../render/loop';
 import { isReducedMotion, toggleReducedMotion } from '../reducedMotion';
 import { updateMenuText } from './menu';
+import { startMenuAmbient } from '../audio';
+import { stopGameplayAudio } from '../audioUnlocks';
+import { registerOnboardingSkipHandler } from './onboarding';
+
+// Break the runLoop→onboarding→modals cycle: register returnToMenu as the
+// Skip handler at module load time (same pattern as registerShowResultsScreen).
+registerOnboardingSkipHandler(() => returnToMenu());
 
 // Register with runLoop so gameOver can call back without circular dep
 registerShowResultsScreen(showResultsScreen);
@@ -43,9 +50,22 @@ export function returnToMenu(): void {
 
   // Refresh streak display and daily row state
   updateMenuText();
+
+  // Stop any active gameplay audio layers; start (or resume) menu ambient
+  stopGameplayAudio();
+  startMenuAmbient();
 }
 
 export function setupModalListeners(): void {
+  // "Enter SIGNAL →" shown on results screen when coming from an onboarding round
+  document.getElementById('enter-signal-btn')!.addEventListener('click', () => {
+    profile.hasCompletedOnboarding = true;
+    profile.hasSeenOnboarding = true;
+    saveProfile();
+    state.isOnboarding = false;
+    returnToMenu();
+  });
+
   document.getElementById('menu-btn')!.addEventListener('click', returnToMenu);
   document.getElementById('pause-menu-btn')!.addEventListener('click', () => {
     state.isPaused = false;
