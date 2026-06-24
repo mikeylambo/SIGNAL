@@ -4,8 +4,11 @@ import { PROTOCOLS, PACINGS } from './protocols';
 import { cubes, setCubeState, createBoard } from '../render/board';
 import { camera, spawnParticles } from '../render/scene';
 import { loopState, cameraShake, flashScreen } from '../render/loop';
-import { playTone, haptic } from '../audio';
-import { addSignal, recordRun, recordStreakForToday, t, profile, saveProfile } from '../save';
+import { playTone, haptic, stopMenuAmbient, initAudio } from '../audio';
+import { startGameplayAudio, stopGameplayAudio, spatialPan } from '../audioUnlocks';
+import { showOnboardingHint, fadeOnboardingHint } from '../ui/onboarding';
+import { addSignal, recordRun, t, profile, saveProfile } from '../save';
+import { recordActivity, recordDailyCompletion } from '../streaks';
 import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI, updateStatsUI, renderStatsBar } from '../ui/hud';
 import { delay } from '../utils';
 import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
@@ -78,7 +81,61 @@ export function stopTimer(): void {
 }
 
 
+// ── Onboarding round ───────────────────────────────────────────────────────────
+// Mirrors initGame() but forces Spatial/Classic/Level 1, skips signal and stats,
+// and sets state.isOnboarding so results screen shows the "Enter SIGNAL →" CTA.
+// initGame() is NOT modified.
+
+export async function startOnboardingRound(): Promise<void> {
+  const spatialIdx = PROTOCOLS.findIndex(p => p.id === 'spatial');
+  const classicIdx = PACINGS.findIndex(p => p.id === 'classic');
+  if (spatialIdx >= 0) state.curProtIdx = spatialIdx;
+  if (classicIdx >= 0) state.curPaceIdx = classicIdx;
+  state.isOnboarding = true;
+  state.isDailyRun = false;
+
+  const uiLayer           = document.getElementById('ui-layer')!;
+  const resultsScreen     = document.getElementById('results-screen')!;
+  const stressBarContainer = document.getElementById('stress-bar-container')!;
+  const stressBar         = document.getElementById('stress-bar')!;
+
+  resultsScreen.style.display = 'none';
+  uiLayer.style.display       = 'flex';
+  uiLayer.style.opacity       = '1';
+
+  (document.getElementById('menu-sheet')     as HTMLElement).style.display = 'none';
+  (document.getElementById('controls-hint')  as HTMLElement).style.display = 'none';
+  (document.getElementById('header-balance') as HTMLElement).style.display = 'none';
+  (document.getElementById('stats-bar')      as HTMLElement).style.display = 'flex';
+
+  state.level = 1; state.score = 0; state.streak = 0; state.maxStreak = 0;
+  state.mistakes = 0; state.clears = 0; state.earnedFragments = 0;
+  state.combo = 0; state.maxCombo = 0;
+  state.gridSize = 3; state.activeCount = 3; state.nBackActive = false;
+  loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
+
+  updateComboUI();
+  renderStatsBar();
+
+  stressBarContainer.style.display = 'block';
+  stressBar.style.width = '100%';
+  stressBar.style.backgroundColor = 'var(--active)';
+
+  showOnboardingHint();
+
+  stopMenuAmbient();
+  startGameplayAudio();
+
+  createBoard();
+  await delay(200);
+  await runCountdown();
+  startLevel();
+}
+
 export async function initGame(): Promise<void> {
+  const today = new Date().toISOString().split('T')[0];
+  recordActivity(today);
+
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
@@ -89,6 +146,10 @@ export async function initGame(): Promise<void> {
 
   resultsScreen.style.display = 'none';
   uiLayer.style.display = 'flex';
+
+  // Transition audio: stop menu ambient, start any purchased gameplay layers
+  stopMenuAmbient();
+  startGameplayAudio();
 
   // Hide menu sheet and show gameplay HUD
   (document.getElementById('menu-sheet')     as HTMLElement).style.display = 'none';
@@ -170,13 +231,14 @@ export async function startLevel(): Promise<void> {
 
   showMessage('Observe', 'var(--active)');
   _ob.onObserve?.();
+  if (state.isOnboarding) fadeOnboardingHint();
   await delay(300);
   const speedMult = pPace.id === 'sprint' ? 0.6 : 1;
 
   if (pMode.id === 'interference') {
     state.pattern.forEach(i => setCubeState(cubes[i], 'active'));
     state.decoys.forEach(i => setCubeState(cubes[i], 'decoy'));
-    playTone('active'); playTone('decoy');
+    playTone('active', spatialPan(state.pattern[0] ?? 0)); playTone('decoy');
     await delay(1200 * speedMult);
     if (state.isPaused) return;
     cubes.forEach(c => setCubeState(c, 'base'));
@@ -184,7 +246,7 @@ export async function startLevel(): Promise<void> {
     for (let i = 0; i < state.pattern.length; i++) {
       if (state.isPaused) return;
       setCubeState(cubes[state.pattern[i]], 'active');
-      playTone('active');
+      playTone('active', spatialPan(state.pattern[i]));
       let pause = 200 * speedMult;
       if (pMode.id === 'rhythm') {
         const options = [200, 400, 600];
@@ -252,7 +314,7 @@ export async function startNBackLevel(): Promise<void> {
 
     state.nBackIsFlashing = true;
     setCubeState(cubes[idx], 'active');
-    playTone('active');
+    playTone('active', spatialPan(idx));
 
     const waitTime = Math.max(600, 1200 - (state.level * 50));
     const startTime = Date.now();
@@ -273,6 +335,7 @@ export async function startNBackLevel(): Promise<void> {
 
 export function handleInteraction(cube: THREE.Mesh): void {
   if (!state.isPlayable || state.isPaused) return;
+  initAudio(); // ensure AudioContext exists; safe no-op if already initialised
   const pMode = PROTOCOLS[state.curProtIdx];
   const index = cube.userData['index'] as number;
 
@@ -461,11 +524,13 @@ export function gameOver(reasonText: string): void {
 }
 
 export async function showResultsScreen(): Promise<void> {
+  stopGameplayAudio();
+
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
-  // Record streak before any DOM writes so the result informs the title override
-  const streakResult = recordStreakForToday();
+  // Onboarding rounds do not count toward streak, stats, or signal balance
+  const streakResult = { currentStreak: profile.currentStreak, longestStreak: profile.longestStreak, isNewRecord: false, isMilestone: false, milestoneValue: null as number | null };
 
   const uiLayer = document.getElementById('ui-layer')!;
   const resultsScreen = document.getElementById('results-screen')!;
@@ -477,21 +542,40 @@ export async function showResultsScreen(): Promise<void> {
   uiLayer.style.display = 'none';
   resultsScreen.style.display = 'flex';
 
+  // Swap action buttons for onboarding path
+  const enterSignalBtn = document.getElementById('enter-signal-btn') as HTMLButtonElement;
+  const menuBtn        = document.getElementById('menu-btn')          as HTMLButtonElement;
+  if (state.isOnboarding) {
+    restartBtn.style.display    = 'none';
+    menuBtn.style.display       = 'none';
+    enterSignalBtn.style.display = 'block';
+  } else {
+    enterSignalBtn.style.display = 'none';
+  }
+
   if (state.isDailyRun) {
     restartBtn.style.display = 'none';
-    profile.lastDailyDate = new Date().toISOString().split('T')[0];
-    saveProfile();
+    const todayDate = new Date().toISOString().split('T')[0];
+    recordDailyCompletion(todayDate);
+    streakResult.currentStreak = profile.currentStreak;
+    streakResult.longestStreak = profile.longestStreak;
     state.earnedFragments = Math.floor(state.score / 5);
     resEarnedFrags.innerText = `${state.earnedFragments} · DAILY BONUS`;
-  } else {
+  } else if (!state.isOnboarding) {
     restartBtn.style.display = 'block';
     state.earnedFragments = Math.floor(state.score / 10);
     if (pPace.id === 'zen') state.earnedFragments = Math.floor(state.maxStreak * 2);
     resEarnedFrags.innerText = String(state.earnedFragments);
+  } else {
+    // Onboarding: zero signal, no restart
+    state.earnedFragments = 0;
+    resEarnedFrags.innerText = '0';
   }
 
-  addSignal(state.earnedFragments);
-  recordRun({ score: state.score, level: state.level, signalEarned: state.earnedFragments, combo: state.maxCombo });
+  if (!state.isOnboarding) {
+    addSignal(state.earnedFragments);
+    recordRun({ score: state.score, level: state.level, signalEarned: state.earnedFragments, combo: state.maxCombo });
+  }
   updateStatsUI();
 
   const comboStat = `<div class="stat-box"><span class="stat-label">Best Combo</span><span class="stat-value" style="color:var(--combo)">${state.maxCombo}×</span></div>`;
@@ -535,20 +619,22 @@ export async function showResultsScreen(): Promise<void> {
     ? dailyBoardKey(new Date().toISOString().split('T')[0])
     : modeBoardKey(pMode.id, pPace.id);
 
-  // a. Display name — prompt on first run only
-  if (!profile.display_name) {
-    const name = await promptDisplayName();
-    if (name) {
-      profile.display_name = name;
-      saveProfile();
+  if (!state.isOnboarding) {
+    // a. Display name — prompt on first run only
+    if (!profile.display_name) {
+      const name = await promptDisplayName();
+      if (name) {
+        profile.display_name = name;
+        saveProfile();
+      }
     }
-  }
 
-  // b. Submit score — fire-and-forget; board loads regardless of outcome
-  if (profile.display_name) {
-    submitScore(boardKey, state.score, state.level, pMode.id, pPace.id).catch(err => {
-      console.warn('[SIGNAL] leaderboard submit failed', err);
-    });
+    // b. Submit score — fire-and-forget; board loads regardless of outcome
+    if (profile.display_name) {
+      submitScore(boardKey, state.score, state.level, pMode.id, pPace.id).catch(err => {
+        console.warn('[SIGNAL] leaderboard submit failed', err);
+      });
+    }
   }
 
   // c. Leaderboard panel — skeleton shows immediately inside showLeaderboardPanel

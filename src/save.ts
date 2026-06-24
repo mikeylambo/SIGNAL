@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 8;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -34,8 +34,11 @@ const SaveSystem = (() => {
       currentStreak: 0,
       longestStreak: 0,
       lastRunDate: null,
+      lastActivityDate: null,
       lastDailyDate: null,
       settings: { haptics: true, sfx: true },
+      unlockedAudioFeatures: [],
+      hasCompletedOnboarding: false,
     };
   }
 
@@ -68,6 +71,23 @@ const SaveSystem = (() => {
       raw.longestStreak = 0;
       raw.lastRunDate = null;
       raw.schemaVersion = 5;
+    }
+    if (raw.schemaVersion < 6) {
+      // v5 → v6: audio feature unlocks
+      raw.unlockedAudioFeatures = [];
+      raw.schemaVersion = 6;
+    }
+    if (raw.schemaVersion < 7) {
+      // v6 → v7: simple onboarding gate; all users (new and existing) see the new flow
+      raw.hasCompletedOnboarding = false;
+      raw.schemaVersion = 7;
+    }
+    if (raw.schemaVersion < 8) {
+      // v7 → v8: daily-challenge-only streak semantics; reset legacy any-run streak counts
+      raw.lastActivityDate = null;
+      raw.currentStreak = 0;
+      raw.longestStreak = 0;
+      raw.schemaVersion = 8;
     }
     return raw;
   }

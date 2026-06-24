@@ -32,14 +32,17 @@ export interface SavedProfile {
   hasSeenOnboarding: boolean;
   player_id: string;     // stable UUID generated once; used as leaderboard identity
   display_name: string;  // player-chosen name shown on the leaderboard
-  currentStreak: number;      // consecutive days with ≥1 completed run
-  longestStreak: number;      // all-time best streak
-  lastRunDate: string | null; // ISO date 'YYYY-MM-DD' of last completed run
+  currentStreak: number;          // consecutive daily challenges completed
+  longestStreak: number;          // all-time best daily-challenge streak
+  lastRunDate: string | null;     // ISO date of last completed run (any mode, legacy)
+  lastActivityDate: string | null; // ISO date of any game session start
   lastDailyDate: string | null;
   settings: {
     haptics: boolean;
     sfx: boolean;
   };
+  unlockedAudioFeatures: string[];
+  hasCompletedOnboarding: boolean;
 }
 
 export interface Theme {

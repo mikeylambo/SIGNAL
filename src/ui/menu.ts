@@ -1,12 +1,13 @@
 import { state } from '../state';
 import { PROTOCOLS, PACINGS } from '../game/protocols';
 import { getSignal, spendSignal, themes, currentThemeKey, applyTheme, profile, saveProfile, lightenHex } from '../save';
+import { getStreakDisplay } from '../streaks';
 import type { CustomPalette } from '../types';
 import { playTone, initAudio, haptic } from '../audio';
+import { AUDIO_UNLOCKS, isAudioUnlocked, buyAudioUnlock } from '../audioUnlocks';
 import { renderStatsBar } from './hud';
 import { returnToMenu, updateReducedMotionText } from './modals';
-import { initGame, stopTimer } from '../game/runLoop';
-import { startOnboarding } from './onboarding';
+import { initGame, stopTimer, startOnboardingRound } from '../game/runLoop';
 
 export function updateMenuText(): void {
   const pMode = PROTOCOLS[state.curProtIdx];
@@ -27,13 +28,15 @@ export function updateMenuText(): void {
   hintEl.innerHTML = `${pMode.hint}<br>${pPace.hint}`;
 
   // Streak column
-  if (profile.currentStreak >= 1) {
-    const days = profile.currentStreak;
-    streakEl.textContent = `${days} day${days !== 1 ? 's' : ''} ◆`;
+  const { count: streakCount, protected: streakProtected } = getStreakDisplay();
+  if (streakCount > 0) {
+    streakEl.textContent = streakProtected ? `🔥 ${streakCount}·` : `🔥 ${streakCount}`;
     streakEl.style.color = 'var(--combo)';
+    streakEl.style.cursor = 'pointer';
   } else {
-    streakEl.textContent = '—';
+    streakEl.textContent = '';
     streakEl.style.color = 'var(--text-muted)';
+    streakEl.style.cursor = 'default';
   }
 
   // Header balance
@@ -100,6 +103,64 @@ export function populateStore(): void {
       btn.textContent = 'Buy';
       btn.classList.add('btn-store');
       btn.addEventListener('click', () => buyTheme(key, th.price));
+    }
+
+    item.appendChild(info);
+    item.appendChild(btn);
+    cnt.appendChild(item);
+  });
+
+  // ── Audio enhancements section ──────────────────────────────────────────────
+  const audioHeader = document.createElement('div');
+  audioHeader.style.cssText = 'font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted);letter-spacing:1.5px;padding:10px 0 4px;border-top:1px solid var(--edge);margin-top:4px;';
+  audioHeader.textContent = 'AUDIO ENHANCEMENTS';
+  cnt.appendChild(audioHeader);
+
+  AUDIO_UNLOCKS.forEach(unlock => {
+    const unlocked = isAudioUnlocked(unlock.id);
+
+    const item = document.createElement('div');
+    item.className = 'store-item';
+    item.style.borderLeft = '4px solid var(--active)';
+
+    const info = document.createElement('div');
+    info.className = 'store-item-info';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'store-item-title';
+    titleEl.textContent = unlock.name;
+    info.appendChild(titleEl);
+
+    const descEl = document.createElement('div');
+    descEl.style.cssText = 'font-family:var(--font-mono);font-size:0.68rem;color:var(--text-muted);margin-top:3px;line-height:1.4;';
+    descEl.textContent = unlock.description;
+    info.appendChild(descEl);
+
+    if (!unlocked) {
+      const priceEl = document.createElement('div');
+      priceEl.className = 'store-item-price';
+      priceEl.textContent = `${unlock.price} ⟠`;
+      info.appendChild(priceEl);
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'store-btn';
+    if (unlocked) {
+      btn.textContent = 'Active';
+      btn.classList.add('purchased');
+      btn.disabled = true;
+    } else {
+      btn.textContent = 'Buy';
+      btn.classList.add('btn-store');
+      btn.addEventListener('click', () => {
+        if (buyAudioUnlock(unlock.id, unlock.price)) {
+          populateStore();
+          storeFragCount.innerText = String(getSignal());
+        } else {
+          playTone('wrong');
+          alert('Insufficient Signal.');
+        }
+      });
     }
 
     item.appendChild(info);
@@ -252,11 +313,7 @@ export function setupMenuListeners(): void {
   startBtn.addEventListener('click', () => {
     initAudio();
     state.isDailyRun = false;
-    if (!profile.hasSeenOnboarding) {
-      void startOnboarding();
-    } else {
-      initGame();
-    }
+    initGame();
   });
 
   // Daily row — the entire div is clickable; guard if already completed today
@@ -367,6 +424,34 @@ export function setupMenuListeners(): void {
   });
 
   document.getElementById('close-store-btn')!.addEventListener('click', returnToMenu);
+  // Audio unlock buy buttons are wired dynamically in populateStore()
+
+  // Streak inline expansion toggle
+  let streakExpanded = false;
+  let streakDetailEl: HTMLElement | null = null;
+  document.getElementById('streak-display')!.addEventListener('click', () => {
+    const { count } = getStreakDisplay();
+    if (count === 0) return;
+    streakExpanded = !streakExpanded;
+    if (streakExpanded) {
+      if (!streakDetailEl) {
+        streakDetailEl = document.createElement('div');
+        streakDetailEl.id = 'streak-detail';
+        streakDetailEl.style.cssText = 'font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted);margin-top:4px;letter-spacing:0.5px;';
+        document.getElementById('streak-display')!.insertAdjacentElement('afterend', streakDetailEl);
+      }
+      streakDetailEl.textContent = `${count} day streak · best ${profile.longestStreak}`;
+      streakDetailEl.style.display = 'block';
+    } else if (streakDetailEl) {
+      streakDetailEl.style.display = 'none';
+    }
+  });
+
+  // Auto-trigger onboarding for first-time players — runs after all listeners
+  // are wired so the game is ready to handle input immediately.
+  if (!profile.hasCompletedOnboarding) {
+    void startOnboardingRound();
+  }
 }
 
 function updateHapticsToggleText(): void {
