@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Test reliability**: removed auto-start of menu ambient from `initAudio()`. The ambient now
+  starts exclusively from `returnToMenu()`, eliminating CPU contention between Web Audio oscillators
+  and the SwiftShader software WebGL renderer that was causing `setTimeout` delays to stretch past
+  Playwright's 8 s assertion windows. All 17 tests now pass reliably.
+- **Defensive opacity**: `initGame()` now explicitly resets `#ui-layer` opacity to `1`, matching
+  the same guard already present in `startOnboardingRound()`.
+
+
+
 ### Changed — Menu redesign
 - **Bottom sheet menu**: replaced the centre-display overlay with a sliding
   bottom sheet. The 3D board is now visible and interactive behind the menu at

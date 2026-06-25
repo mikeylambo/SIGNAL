@@ -146,6 +146,7 @@ export async function initGame(): Promise<void> {
 
   resultsScreen.style.display = 'none';
   uiLayer.style.display = 'flex';
+  uiLayer.style.opacity = '1';
 
   // Transition audio: stop menu ambient, start any purchased gameplay layers
   stopMenuAmbient();

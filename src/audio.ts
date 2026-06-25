@@ -17,11 +17,6 @@ export function initAudio(): void {
     audioCtx = new AudioCtx();
   }
   if (audioCtx.state === 'suspended') void audioCtx.resume();
-  // Auto-start menu ambient on first gesture if we're in menu state
-  const menuSheet = document.getElementById('menu-sheet');
-  if (menuSheet?.style.display !== 'none' && !menuAmbientRunning) {
-    startMenuAmbient();
-  }
 }
 
 // ── Menu ambient: 40 Hz isochronic (amplitude-modulated 200 Hz carrier) ────────
