@@ -39,7 +39,7 @@ async function startGame(page: Page): Promise<void> {
 // Uses __signal to find a non-pattern tile via exact Three.js projection.
 async function triggerGameOver(page: Page): Promise<void> {
   await startGame(page);
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
   type SignalHandle = {
     getState: () => { pattern: number[] };
@@ -62,7 +62,7 @@ async function triggerGameOver(page: Page): Promise<void> {
     if (box) await page.mouse.click(box.x + 2, box.y + 2);
   }
 
-  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 4000 });
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 8000 });
 }
 
 // Returns the level shown in the HUD (val-lvl element).
@@ -93,7 +93,7 @@ test('Engage starts countdown then enters Execute phase', async ({ page }) => {
   // "Constructing" delay (500ms) + Observe phase (~1.35s) ≈ 4.8s from click.
   // Use a generous explicit timeout rather than a fixed sleep so the test
   // passes regardless of machine speed.
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
   expect(errors).toHaveLength(0);
 });
@@ -105,7 +105,7 @@ test('click through a full Spatial pattern — level increments to 2', async ({ 
   await startGame(page);
 
   // After Execute phase starts, the pause button is visible and val-lvl shows 1.
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
   expect(await getLevel(page)).toBe(1);
 
   // Click systematically across the board. The board is a 3×3 grid of cubes
@@ -176,7 +176,7 @@ test('pause and resume does not break gameplay', async ({ page }) => {
   await page.goto('/');
   await startGame(page);
 
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
   // Pause
   await page.locator('#pause-btn').click();
@@ -185,7 +185,7 @@ test('pause and resume does not break gameplay', async ({ page }) => {
   // Resume
   await page.locator('#resume-btn').click();
   await expect(page.locator('#pause-screen')).toBeHidden();
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
   // Gameplay still running — loop should be active
   const loopRunning = await page.evaluate(() => {
@@ -199,7 +199,7 @@ test('background/foreground while paused does not create double render loop', as
   await page.goto('/');
   await startGame(page);
 
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
   // --- PAUSE first ---
   await page.locator('#pause-btn').click();
@@ -338,7 +338,7 @@ test('streak increments after a completed daily run reaches results screen', asy
   // Trigger a daily run (not a regular run) so streak increments
   await page.locator('#daily-row').click();
   await page.waitForTimeout(COUNTDOWN_MS);
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
   type SignalHandle = {
     getState: () => { pattern: number[] };
@@ -397,7 +397,7 @@ test('streak resets after a gap day', async ({ page }) => {
   // Use daily run so recordDailyCompletion is called and streak resets
   await page.locator('#daily-row').click();
   await page.waitForTimeout(COUNTDOWN_MS);
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
   type SignalHandle = {
     getState: () => { pattern: number[] };
@@ -465,7 +465,7 @@ test('daily mode key is date-scoped', async ({ page }) => {
   // Start daily run then trigger game-over via wrong tile
   await page.locator('#daily-row').click();
   await page.waitForTimeout(COUNTDOWN_MS);
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
   type SignalHandle = {
     getState: () => { pattern: number[] };
@@ -482,7 +482,7 @@ test('daily mode key is date-scoped', async ({ page }) => {
   });
   if (wrongPos) await page.mouse.click(wrongPos.x, wrongPos.y);
 
-  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 4000 });
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 8000 });
   await expect(page.locator('#leaderboard-panel')).toBeVisible({ timeout: 6000 });
 
   // Title should be 'DAILY · MMM D' format

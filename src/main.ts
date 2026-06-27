@@ -18,6 +18,25 @@ document.addEventListener('touchmove', (e: TouchEvent) => {
 }, { passive: false });
 
 window.addEventListener('load', () => {
+  // On iOS, enable viewport-fit=cover so env(safe-area-inset-*) returns real values,
+  // then read those values once and store as static CSS vars (--sat / --sab).
+  // Skipped entirely on non-iOS / headless to avoid layout overhead.
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    const vp = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+    if (vp && !vp.content.includes('viewport-fit')) {
+      vp.content += ', viewport-fit=cover';
+    }
+    const _saDiv = document.createElement('div');
+    _saDiv.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px);height:0;visibility:hidden;pointer-events:none;';
+    document.body.appendChild(_saDiv);
+    const _saStyle = getComputedStyle(_saDiv);
+    const _sat = parseFloat(_saStyle.top) || 0;
+    const _sab = parseFloat(_saStyle.bottom) || 0;
+    _saDiv.remove();
+    if (_sat > 0) document.documentElement.style.setProperty('--sat', `${_sat}px`);
+    if (_sab > 0) document.documentElement.style.setProperty('--sab', `${_sab}px`);
+  }
+
   const container = document.getElementById('canvas-container')!;
 
   updateMenuText();

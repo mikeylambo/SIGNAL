@@ -87,6 +87,7 @@ export function stopTimer(): void {
 // initGame() is NOT modified.
 
 export async function startOnboardingRound(): Promise<void> {
+  if (profile.hasSeenOnboarding) return;
   const spatialIdx = PROTOCOLS.findIndex(p => p.id === 'spatial');
   const classicIdx = PACINGS.findIndex(p => p.id === 'classic');
   if (spatialIdx >= 0) state.curProtIdx = spatialIdx;

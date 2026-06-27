@@ -55,7 +55,7 @@
         /* Header takes its own padding so absolute children can reach the edges */
         .header {
             display: flex; justify-content: space-between; align-items: flex-start;
-            width: 100%; padding: 1.5rem 1.5rem 0; box-sizing: border-box;
+            width: 100%; padding: calc(1.5rem + var(--sat, 0px)) 1.5rem 0; box-sizing: border-box;
         }
         h1 { margin: 0; font-family: var(--font-display); font-size: 1.5rem; font-weight: 800; letter-spacing: 6px; color: var(--text); text-transform: uppercase; transition: color 0.5s; }
         h1 .h1-accent { color: var(--active); text-shadow: 0 0 14px var(--active); }
@@ -163,7 +163,7 @@
         @keyframes lbPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
 
         @media (max-width: 768px) {
-            .header { padding: 1rem 1rem 0; }
+            .header { padding: calc(1rem + var(--sat, 0px)) 1rem 0; }
             h1 { font-size: 1.6rem; }
             .stats { font-size: 0.9rem; padding: 0.6rem 1rem; gap: 1rem; width: 100%; }
             .icon-btn { position: absolute; top: 1rem; right: 1rem; }
@@ -225,7 +225,7 @@
             position:absolute; bottom:0; left:0; right:0;
             background:rgba(7,14,23,0.96); backdrop-filter:blur(20px);
             border-top:1px solid var(--edge); border-radius:22px 22px 0 0;
-            padding:12px 18px 32px; display:flex; flex-direction:column;
+            padding:12px 18px calc(32px + var(--sab, 0px)); display:flex; flex-direction:column;
             gap:10px; pointer-events:auto; transition:transform 0.3s ease;">
 
             <!-- Drag pill -->
@@ -264,7 +264,8 @@
             <div id="hint-message" aria-live="polite" style="
                 font-family:var(--font-mono); font-size:0.72rem;
                 color:var(--text-muted); text-align:center;
-                line-height:1.65; letter-spacing:0.5px; min-height:2.4rem;">
+                line-height:1.65; letter-spacing:0.5px; min-height:2.4rem;
+                max-width:320px; margin-left:auto; margin-right:auto;">
             </div>
 
             <!-- Engage -->

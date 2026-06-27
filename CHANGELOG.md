@@ -8,6 +8,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- **Onboarding skip flag**: `hasSeenOnboarding` and `hasCompletedOnboarding` are now persisted to
+  localStorage at the very start of the skip-button handler, before `returnToMenu()` re-reads the
+  profile. Added a `hasSeenOnboarding` guard in `startOnboardingRound()` to prevent double-entry.
+- **Score submit timing**: confirmed `submitScore()` fires only after `await promptDisplayName()`
+  resolves, so the display name is always saved before the leaderboard entry is created.
+- **iOS safe-area insets**: on iOS devices the viewport meta gains `viewport-fit=cover` at runtime
+  and `env(safe-area-inset-top/bottom)` values are read once and stored as `--sat`/`--sab` CSS
+  custom properties. `.header` and `#menu-sheet` reference these via `calc()`. Non-iOS / headless
+  environments are unaffected (no DOM overhead, CSS fallback is `0px`).
+- **Hint text wrapping**: protocol and pacing hint strings shortened to fit narrow screens without
+  wrapping; `#hint-message` gained `max-width: 320px` and auto side margins.
 - **Test reliability**: removed auto-start of menu ambient from `initAudio()`. The ambient now
   starts exclusively from `returnToMenu()`, eliminating CPU contention between Web Audio oscillators
   and the SwiftShader software WebGL renderer that was causing `setTimeout` delays to stretch past

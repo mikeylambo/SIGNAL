@@ -51,11 +51,12 @@ export function showOnboardingHint(): void {
   ].join('');
 
   skipBtn.addEventListener('click', () => {
-    initAudio();
+    // Save flags first — before returnToMenu() fires and re-reads profile
     profile.hasCompletedOnboarding = true;
     profile.hasSeenOnboarding = true;
     saveProfile();
     state.isOnboarding = false;
+    initAudio();
     fadeOnboardingHint();
     setTimeout(() => _onSkipComplete?.(), 420);
   });

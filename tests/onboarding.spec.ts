@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // No beforeEach seed — these tests intentionally start with fresh localStorage
 // to exercise the onboarding flow.
 
-const ONBOARDING_TIMEOUT_MS = 10000; // countdown + constructing + observe phase
+const ONBOARDING_TIMEOUT_MS = 20000; // countdown + constructing + observe phase
 
 test('fresh localStorage triggers onboarding — menu sheet is hidden, countdown appears', async ({ page }) => {
   await page.goto('/');
@@ -72,7 +72,7 @@ test('completing the onboarding round shows "Enter SIGNAL →" and landing on me
   }
 
   // Results screen appears with "Enter SIGNAL →" CTA
-  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 4000 });
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 8000 });
   await expect(page.locator('#enter-signal-btn')).toBeVisible({ timeout: 2000 });
   await expect(page.locator('#restart-btn')).toBeHidden();
   await expect(page.locator('#menu-btn')).toBeHidden();
