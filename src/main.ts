@@ -70,6 +70,7 @@ window.addEventListener('load', () => {
   // Register theme-change callback now that scene objects exist
   setThemeChangeCallback(() => {
     if (!scene) return;
+    if (renderer) renderer.setClearColor(t.bg, 1);
     if (scene.fog) (scene.fog as THREE.FogExp2).color.setHex(t.bg);
     if (pLight) pLight.color.setHex(t.active);
     if (gridFloor) (gridFloor.material as THREE.LineBasicMaterial).color.setHex(t.edge);

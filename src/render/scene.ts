@@ -68,6 +68,7 @@ export function initScene(container: HTMLElement): void {
   if (!gl) throw new Error('WebGL is not supported or has been disabled on this device.');
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setClearColor(t.bg, 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   container.appendChild(renderer.domElement);
