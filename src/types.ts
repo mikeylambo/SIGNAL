@@ -40,6 +40,7 @@ export interface SavedProfile {
   settings: {
     haptics: boolean;
     sfx: boolean;
+    volume: number;
   };
   unlockedAudioFeatures: string[];
   hasCompletedOnboarding: boolean;

@@ -34,6 +34,21 @@ export let bloomEnabled = false;
 
 export const particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 
+// Pulls the camera back on small or portrait viewports so the board isn't clipped.
+// Called at init and on every resize.
+export function adjustCameraForViewport(): void {
+  const portrait = window.innerWidth < window.innerHeight;
+  const small    = window.innerHeight < 700;
+  if (portrait || small) {
+    camera.fov = 58;
+    camera.position.set(0, 8, 16);
+  } else {
+    camera.fov = 45;
+    camera.position.set(0, 8, 12);
+  }
+  camera.updateProjectionMatrix();
+}
+
 export function initScene(container: HTMLElement): void {
   scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(t.bg, 0.04);
@@ -90,6 +105,8 @@ export function initScene(container: HTMLElement): void {
 
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2();
+
+  adjustCameraForViewport();
 }
 
 export function spawnParticles(position: THREE.Vector3, colorHex: string, count = 10): void {

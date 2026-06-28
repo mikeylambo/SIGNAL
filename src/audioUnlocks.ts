@@ -1,5 +1,5 @@
 import { profile, saveProfile, spendSignal, getSignal } from './save';
-import { getAudioCtx, playTone } from './audio';
+import { getAudioCtx, playTone, getVolume } from './audio';
 
 // ── Unlock catalogue ───────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ export function startBinaural(): void {
   const merger = ctx.createChannelMerger(2);
   const out = ctx.createGain();
   out.gain.setValueAtTime(0, now);
-  out.gain.linearRampToValueAtTime(0.07, now + 2.5);
+  out.gain.linearRampToValueAtTime(0.07 * getVolume(), now + 2.5);
   merger.connect(out);
   out.connect(ctx.destination);
 
@@ -151,7 +151,7 @@ export function startGamma(): void {
 
   const out = ctx.createGain();
   out.gain.setValueAtTime(0, now);
-  out.gain.linearRampToValueAtTime(0.04, now + 2.5);
+  out.gain.linearRampToValueAtTime(0.04 * getVolume(), now + 2.5);
 
   carrier.connect(ampMod);
   ampMod.connect(out);

@@ -133,6 +133,7 @@ export async function startOnboardingRound(): Promise<void> {
   startLevel();
 }
 
+
 export async function initGame(): Promise<void> {
   const today = new Date().toISOString().split('T')[0];
   recordActivity(today);
@@ -153,11 +154,17 @@ export async function initGame(): Promise<void> {
   stopMenuAmbient();
   startGameplayAudio();
 
-  // Hide menu sheet and show gameplay HUD
-  (document.getElementById('menu-sheet')     as HTMLElement).style.display = 'none';
+  // Fade menu sheet out over 200ms, then hide it
+  const menuSheet = document.getElementById('menu-sheet') as HTMLElement;
+  menuSheet.classList.add('menu-sheet-hiding');
+  setTimeout(() => { menuSheet.style.display = 'none'; menuSheet.classList.remove('menu-sheet-hiding'); }, 200);
   (document.getElementById('controls-hint')  as HTMLElement).style.display = 'none';
   (document.getElementById('header-balance') as HTMLElement).style.display = 'none';
-  (document.getElementById('stats-bar')      as HTMLElement).style.display = 'flex';
+
+  // Show stats bar at opacity 0; transition to 1 after the 200ms menu fade
+  const statsBar = document.getElementById('stats-bar') as HTMLElement;
+  statsBar.style.opacity = '0';
+  statsBar.style.display = 'flex';
 
   state.level = 1; state.score = 0; state.streak = 0; state.maxStreak = 0;
   state.mistakes = 0; state.clears = 0; state.earnedFragments = 0;
@@ -182,6 +189,7 @@ export async function initGame(): Promise<void> {
 
   createBoard();
   await delay(200);
+  statsBar.style.opacity = '1';  // fade HUD in (CSS transition: opacity 0.3s)
   await runCountdown();
 
   if (pPace.id === 'sprint' && pMode.id !== 'nback') {

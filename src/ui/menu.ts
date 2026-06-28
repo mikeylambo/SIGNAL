@@ -3,7 +3,7 @@ import { PROTOCOLS, PACINGS } from '../game/protocols';
 import { getSignal, spendSignal, themes, currentThemeKey, applyTheme, profile, saveProfile, lightenHex } from '../save';
 import { getStreakDisplay } from '../streaks';
 import type { CustomPalette } from '../types';
-import { playTone, initAudio, haptic } from '../audio';
+import { playTone, initAudio, haptic, setMasterVolume } from '../audio';
 import { AUDIO_UNLOCKS, isAudioUnlocked, buyAudioUnlock } from '../audioUnlocks';
 import { renderStatsBar } from './hud';
 import { returnToMenu, updateReducedMotionText } from './modals';
@@ -355,19 +355,34 @@ export function setupMenuListeners(): void {
     const profBestStreak = document.getElementById('prof-best-streak');
     if (profStreak) profStreak.innerText = String(profile.currentStreak);
     if (profBestStreak) profBestStreak.innerText = String(profile.longestStreak);
-    updateHapticsToggleText();
     updateReducedMotionText();
   });
 
-  // Style modal
+  // Settings modal
   forgeBtn.addEventListener('click', () => {
     initAudio();
     (document.getElementById('ui-layer') as HTMLElement).style.display = 'none';
     (document.getElementById('forge-screen') as HTMLElement).style.display = 'flex';
+    // Default to Audio tab on open
+    switchSettingsTab('audio');
+    initAudioTab();
     openForge();
   });
 
   document.getElementById('close-forge-btn')!.addEventListener('click', returnToMenu);
+  document.getElementById('close-forge-btn-visual')!.addEventListener('click', returnToMenu);
+
+  // Settings tab switching
+  document.getElementById('settings-tab-audio')!.addEventListener('click', () => switchSettingsTab('audio'));
+  document.getElementById('settings-tab-visual')!.addEventListener('click', () => switchSettingsTab('visual'));
+
+  // Volume slider
+  const volumeSlider = document.getElementById('volume-slider') as HTMLInputElement;
+  volumeSlider.addEventListener('input', () => {
+    const v = parseInt(volumeSlider.value) / 100;
+    setMasterVolume(v);
+    document.getElementById('volume-val')!.textContent = volumeSlider.value;
+  });
 
   document.getElementById('apply-forge-btn')!.addEventListener('click', () => {
     initAudio();
@@ -452,6 +467,33 @@ export function setupMenuListeners(): void {
   if (!profile.hasCompletedOnboarding) {
     void startOnboardingRound();
   }
+}
+
+function switchSettingsTab(tab: 'audio' | 'visual'): void {
+  const audioContent = document.getElementById('settings-content-audio')!;
+  const visualContent = document.getElementById('settings-content-visual')!;
+  const audioTab = document.getElementById('settings-tab-audio')!;
+  const visualTab = document.getElementById('settings-tab-visual')!;
+  const isAudio = tab === 'audio';
+  audioContent.style.display = isAudio ? '' : 'none';
+  visualContent.style.display = isAudio ? 'none' : '';
+  audioTab.classList.toggle('settings-tab-active', isAudio);
+  visualTab.classList.toggle('settings-tab-active', !isAudio);
+}
+
+function initAudioTab(): void {
+  const vol = Math.round((profile.settings.volume ?? 0.7) * 100);
+  const slider = document.getElementById('volume-slider') as HTMLInputElement;
+  slider.value = String(vol);
+  document.getElementById('volume-val')!.textContent = String(vol);
+  updateHapticsToggleText();
+  updateSfxToggleText();
+}
+
+function updateSfxToggleText(): void {
+  const btn = document.getElementById('sfx-toggle-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.innerText = `SFX: ${profile.settings.sfx ? 'On' : 'Off'}`;
 }
 
 function updateHapticsToggleText(): void {

@@ -17,6 +17,23 @@ document.addEventListener('touchmove', (e: TouchEvent) => {
   if (e.touches.length > 1) e.preventDefault();
 }, { passive: false });
 
+// Splash screen: skip immediately for returning users (covers Playwright tests too,
+// since they seed localStorage with hasCompletedOnboarding: true).
+// New users see a 2s show + 0.5s fade = 2.5s total before the splash is removed.
+{
+  const splashEl = document.getElementById('splash-screen');
+  if (splashEl) {
+    if (profile.hasCompletedOnboarding) {
+      splashEl.remove();
+    } else {
+      setTimeout(() => {
+        splashEl.classList.add('splash-fade-out');
+        setTimeout(() => splashEl.remove(), 500);
+      }, 2000);
+    }
+  }
+}
+
 window.addEventListener('load', () => {
   // On iOS, enable viewport-fit=cover so env(safe-area-inset-*) returns real values,
   // then read those values once and store as static CSS vars (--sat / --sab).

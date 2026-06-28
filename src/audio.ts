@@ -1,4 +1,4 @@
-import { profile } from './save';
+import { profile, saveProfile } from './save';
 
 let audioCtx: AudioContext | null = null;
 
@@ -10,6 +10,18 @@ let menuAmbientOut: GainNode | null = null;
 let menuAmbientRunning = false;
 
 export function getAudioCtx(): AudioContext | null { return audioCtx; }
+
+export function getVolume(): number { return profile.settings.volume ?? 0.7; }
+
+export function setMasterVolume(v: number): void {
+  profile.settings.volume = v;
+  saveProfile();
+  if (menuAmbientRunning && menuAmbientOut && audioCtx) {
+    const now = audioCtx.currentTime;
+    menuAmbientOut.gain.setValueAtTime(menuAmbientOut.gain.value, now);
+    menuAmbientOut.gain.linearRampToValueAtTime(0.008 * v, now + 0.1);
+  }
+}
 
 export function initAudio(): void {
   if (!audioCtx) {
@@ -50,7 +62,7 @@ export function startMenuAmbient(): void {
   // Master output gain — very quiet fade-in
   const out = ctx.createGain();
   out.gain.setValueAtTime(0, now);
-  out.gain.linearRampToValueAtTime(0.016, now + 3);
+  out.gain.linearRampToValueAtTime(0.008 * getVolume(), now + 3);
 
   carrier.connect(ampMod);
   ampMod.connect(out);
@@ -141,7 +153,7 @@ export function playTone(type: string, pan = 0): void {
     case 'active': {
       // Layered: triangle fundamental + sine 5th for shimmer
       const { osc, gain } = voice(ctx, 'triangle', 528, pan);
-      gain.gain.linearRampToValueAtTime(0.06, now + 0.01);
+      gain.gain.linearRampToValueAtTime(0.06 * getVolume(), now + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
       osc.start(now); osc.stop(now + 0.2);
 
@@ -164,7 +176,7 @@ export function playTone(type: string, pan = 0): void {
       // Rising ping: sine sweep + high harmonic sparkle
       const { osc, gain } = voice(ctx, 'sine', 880, pan);
       osc.frequency.exponentialRampToValueAtTime(1760, now + 0.12);
-      gain.gain.linearRampToValueAtTime(0.1, now + 0.01);
+      gain.gain.linearRampToValueAtTime(0.1 * getVolume(), now + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
       osc.start(now); osc.stop(now + 0.22);
 
@@ -179,7 +191,7 @@ export function playTone(type: string, pan = 0): void {
       // Descending crunch + dissonant rumble
       const { osc, gain } = voice(ctx, 'sawtooth', 110, pan);
       osc.frequency.linearRampToValueAtTime(40, now + 0.4);
-      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.setValueAtTime(0.18 * getVolume(), now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
       osc.start(now); osc.stop(now + 0.4);
 
@@ -196,7 +208,7 @@ export function playTone(type: string, pan = 0): void {
       freqs.forEach((f, i) => {
         const t0 = now + i * 0.09;
         const { osc, gain } = voice(ctx, 'triangle', f, 0);
-        gain.gain.linearRampToValueAtTime(0.1, t0 + 0.02);
+        gain.gain.linearRampToValueAtTime(0.1 * getVolume(), t0 + 0.02);
         gain.gain.linearRampToValueAtTime(0, t0 + 0.16);
         osc.start(t0); osc.stop(t0 + 0.18);
       });
@@ -224,7 +236,7 @@ export function playTone(type: string, pan = 0): void {
 
     case 'go': {
       const { osc, gain } = voice(ctx, 'square', 1320, 0);
-      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.setValueAtTime(0.08 * getVolume(), now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
       osc.start(now); osc.stop(now + 0.3);
 
@@ -248,7 +260,7 @@ export function playTone(type: string, pan = 0): void {
     case 'comboTick': {
       const { osc, gain } = voice(ctx, 'triangle', 900, 0);
       osc.frequency.exponentialRampToValueAtTime(1800, now + 0.12);
-      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.setValueAtTime(0.12 * getVolume(), now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
       osc.start(now); osc.stop(now + 0.25);
 

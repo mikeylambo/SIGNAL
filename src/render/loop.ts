@@ -61,8 +61,15 @@ export function animate(timestamp: number): void {
   }
 
   const rotLerp = 1 - Math.pow(1 - 0.1, dt60);
-  pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
-  pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
+  const isMenuIdle = !state.isPlayable && !state.timerActive && !state.nBackActive
+                     && !state.isPaused && !state.isOnboarding;
+  if (isMenuIdle && !reducedMotion) {
+    pivotGroup.rotation.y += 0.003 * dt60;
+    pivotGroup.rotation.x = Math.sin(timestamp * 0.0003) * 0.08;
+  } else {
+    pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
+    pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
+  }
 
   if (!loopState.isDragging && !reducedMotion) {
     const driftLerp = 1 - Math.pow(1 - 0.05, dt60);

@@ -93,12 +93,19 @@ export function setupModalListeners(): void {
 
   document.getElementById('close-profile-btn')!.addEventListener('click', returnToMenu);
 
-  // Haptics toggle
+  // Haptics toggle (now in Settings → Audio tab)
   document.getElementById('haptics-toggle-btn')!.addEventListener('click', () => {
     profile.settings.haptics = !profile.settings.haptics;
     saveProfile();
     updateHapticsToggleText();
     if (profile.settings.haptics && navigator.vibrate) navigator.vibrate(12);
+  });
+
+  // SFX toggle
+  document.getElementById('sfx-toggle-btn')!.addEventListener('click', () => {
+    profile.settings.sfx = !profile.settings.sfx;
+    saveProfile();
+    updateSfxToggleText();
   });
 
   // Reduced-motion toggle
@@ -118,4 +125,10 @@ function updateHapticsToggleText(): void {
   const btn = document.getElementById('haptics-toggle-btn') as HTMLButtonElement | null;
   if (!btn) return;
   btn.innerText = `Haptics: ${profile.settings.haptics ? 'On' : 'Off'}`;
+}
+
+function updateSfxToggleText(): void {
+  const btn = document.getElementById('sfx-toggle-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.innerText = `SFX: ${profile.settings.sfx ? 'On' : 'Off'}`;
 }

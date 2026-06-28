@@ -1,10 +1,9 @@
 import * as THREE from 'three';
-import { camera, raycaster, mouse } from './render/scene';
+import { camera, raycaster, mouse, composer, bloomPass, renderer, bloomResScale, adjustCameraForViewport } from './render/scene';
 import { cubes } from './render/board';
 import { loopState } from './render/loop';
 import { handleInteraction } from './game/runLoop';
 import { state } from './state';
-import { composer, bloomPass, renderer, bloomResScale } from './render/scene';
 import { createBoard } from './render/board';
 
 export const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -88,7 +87,7 @@ export function onWindowResize(): void {
   // Reset zoom on orientation change so a pinch-zoom from portrait doesn't
   // carry over and leave a stale multiplier in landscape (or vice versa).
   camera.zoom = 1;
-  camera.updateProjectionMatrix();
+  adjustCameraForViewport();
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (composer) composer.setSize(window.innerWidth, window.innerHeight);
   if (bloomPass) {

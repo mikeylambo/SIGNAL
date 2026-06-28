@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -36,7 +36,7 @@ const SaveSystem = (() => {
       lastRunDate: null,
       lastActivityDate: null,
       lastDailyDate: null,
-      settings: { haptics: true, sfx: true },
+      settings: { haptics: true, sfx: true, volume: 0.7 },
       unlockedAudioFeatures: [],
       hasCompletedOnboarding: false,
     };
@@ -88,6 +88,11 @@ const SaveSystem = (() => {
       raw.currentStreak = 0;
       raw.longestStreak = 0;
       raw.schemaVersion = 8;
+    }
+    if (raw.schemaVersion < 9) {
+      // v8 → v9: master volume setting
+      if (raw.settings.volume === undefined) raw.settings.volume = 0.7;
+      raw.schemaVersion = 9;
     }
     return raw;
   }
