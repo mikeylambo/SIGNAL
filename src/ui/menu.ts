@@ -4,7 +4,7 @@ import { getSignal, spendSignal, themes, currentThemeKey, applyTheme, profile, s
 import { getStreakDisplay } from '../streaks';
 import type { CustomPalette } from '../types';
 import { playTone, initAudio, haptic, setMasterVolume } from '../audio';
-import { AUDIO_UNLOCKS, isAudioUnlocked, buyAudioUnlock } from '../audioUnlocks';
+import { AUDIO_UNLOCKS, isAudioUnlocked, buyAudioUnlock, isAudioFeatureEnabled, setAudioFeatureEnabled } from '../audioUnlocks';
 import { renderStatsBar } from './hud';
 import { returnToMenu, updateReducedMotionText } from './modals';
 import { initGame, stopTimer, startOnboardingRound } from '../game/runLoop';
@@ -146,9 +146,14 @@ export function populateStore(): void {
     const btn = document.createElement('button');
     btn.className = 'store-btn';
     if (unlocked) {
-      btn.textContent = 'Active';
-      btn.classList.add('purchased');
-      btn.disabled = true;
+      const enabled = isAudioFeatureEnabled(unlock.id);
+      btn.textContent = enabled ? 'On ✓' : 'Off';
+      btn.style.color = enabled ? 'var(--correct)' : 'var(--text-muted)';
+      btn.style.borderColor = enabled ? 'var(--correct)' : 'rgba(255,255,255,0.2)';
+      btn.addEventListener('click', () => {
+        setAudioFeatureEnabled(unlock.id, !enabled);
+        populateStore();
+      });
     } else {
       btn.textContent = 'Buy';
       btn.classList.add('btn-store');
@@ -253,15 +258,30 @@ function refreshForgeUI(): void {
 }
 
 function openForge(): void {
-  draftPalette = { ...profile.customPalette };
+  const slot = profile.activeCustomSlot ?? 'custom1';
+  const slotPalette = profile.customPalettes?.[slot] ?? profile.customPalette;
+  draftPalette = { ...slotPalette };
   selectedSlot = 'active';
   loadSlotIntoSliders(draftPalette[selectedSlot]);
   refreshForgeUI();
+  updateCustomSlotUI();
+}
+
+function updateCustomSlotUI(): void {
+  const active = profile.activeCustomSlot ?? 'custom1';
+  document.querySelectorAll<HTMLButtonElement>('.custom-slot-btn').forEach(btn => {
+    const isActive = btn.dataset['slot'] === active;
+    btn.style.borderColor = isActive ? 'var(--active)' : 'rgba(255,255,255,0.14)';
+    btn.style.color = isActive ? 'var(--active)' : '';
+  });
 }
 
 function applyForge(): void {
-  profile.customPalette = { ...draftPalette };
-  profile.customHex = draftPalette.active;  // keep legacy field in sync
+  const slot = profile.activeCustomSlot ?? 'custom1';
+  if (!profile.customPalettes) profile.customPalettes = { custom1: { ...draftPalette }, custom2: { ...draftPalette }, custom3: { ...draftPalette } };
+  profile.customPalettes[slot] = { ...draftPalette };
+  profile.customPalette = { ...draftPalette }; // keep legacy field in sync
+  profile.customHex = draftPalette.active;
   saveProfile();
 
   const h = (hex: string) => parseInt(hex.replace('#', ''), 16);
@@ -462,11 +482,31 @@ export function setupMenuListeners(): void {
     }
   });
 
-  // Auto-trigger onboarding for first-time players — runs after all listeners
-  // are wired so the game is ready to handle input immediately.
-  if (!profile.hasCompletedOnboarding) {
-    void startOnboardingRound();
+  // "How to Play" — opt-in tutorial from the menu sheet
+  const howToPlayBtn = document.getElementById('how-to-play-btn');
+  if (howToPlayBtn) {
+    howToPlayBtn.addEventListener('click', () => {
+      initAudio();
+      profile.hasCompletedOnboarding = false;
+      profile.hasSeenOnboarding = false;
+      saveProfile();
+      void startOnboardingRound();
+    });
   }
+
+  // Custom palette slot selector
+  document.querySelectorAll<HTMLButtonElement>('.custom-slot-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const slot = btn.dataset['slot'] ?? 'custom1';
+      profile.activeCustomSlot = slot;
+      saveProfile();
+      const slotPalette = profile.customPalettes?.[slot] ?? profile.customPalette;
+      draftPalette = { ...slotPalette };
+      loadSlotIntoSliders(draftPalette[selectedSlot]);
+      refreshForgeUI();
+      updateCustomSlotUI();
+    });
+  });
 }
 
 function switchSettingsTab(tab: 'audio' | 'visual'): void {

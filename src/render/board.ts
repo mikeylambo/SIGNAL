@@ -96,11 +96,14 @@ export function createBoard(): void {
   void gridFloor;
   void scene;
 
-  const aspect = window.innerWidth / window.innerHeight;
-  const mobileFovAdjustment = aspect < 1 ? (1 / aspect) * 0.8 : 1;
-  const dist = Math.max(12, state.gridSize * 2.5) * mobileFovAdjustment;
-  camera.position.set(0, dist * 0.6, dist);
-  camera.lookAt(0, 0, 0);
+  const portrait  = window.innerWidth < window.innerHeight;
+  const small     = window.innerHeight < 667;
+  const lookY     = small ? 1.5 : portrait ? 1.0 : 0.5;
+  const baseZ     = small ? 18 : portrait ? 16 : 12;
+  const baseY     = small ? 4 : portrait ? 3.5 : 2;
+  const gridScale = Math.max(1, state.gridSize / 3);
+  camera.position.set(0, baseY * gridScale, baseZ * gridScale);
+  camera.lookAt(0, lookY * gridScale, 0);
   camera.zoom = 1;
   camera.updateProjectionMatrix();
 }

@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -38,6 +38,13 @@ const SaveSystem = (() => {
       lastDailyDate: null,
       settings: { haptics: true, sfx: true, volume: 0.7 },
       unlockedAudioFeatures: [],
+      audioFeatureEnabled: {},
+      customPalettes: {
+        custom1: { ...DEFAULT_PALETTE },
+        custom2: { ...DEFAULT_PALETTE },
+        custom3: { ...DEFAULT_PALETTE },
+      },
+      activeCustomSlot: 'custom1',
       hasCompletedOnboarding: false,
     };
   }
@@ -93,6 +100,18 @@ const SaveSystem = (() => {
       // v8 → v9: master volume setting
       if (raw.settings.volume === undefined) raw.settings.volume = 0.7;
       raw.schemaVersion = 9;
+    }
+    if (raw.schemaVersion < 10) {
+      // v9 → v10: per-feature audio toggles + 3 custom palette slots
+      raw.audioFeatureEnabled = {};
+      const existing: CustomPalette = raw.customPalette ?? DEFAULT_PALETTE;
+      raw.customPalettes = {
+        custom1: { ...existing },
+        custom2: { ...DEFAULT_PALETTE },
+        custom3: { ...DEFAULT_PALETTE },
+      };
+      raw.activeCustomSlot = 'custom1';
+      raw.schemaVersion = 10;
     }
     return raw;
   }
@@ -195,7 +214,8 @@ export function recordStreakForToday(): StreakResult {
 // Custom calibration is always unlocked (free) — it's as much an accessibility
 // tool (colorblind presets) as a cosmetic one. Contrast-gating it defeats that purpose.
 function buildThemes(): Record<string, Theme> {
-  const p = profile.customPalette;
+  const slot = profile.activeCustomSlot ?? 'custom1';
+  const p = profile.customPalettes?.[slot] ?? profile.customPalette;
   const h = (hex: string) => parseInt(hex.replace('#', ''), 16);
   return {
     mono:    { name: 'Mono',       price: 0,    primary: '#00E5FF', bg: 0x05080D, bgHex: '#05080D', text: '#E8FAFF', active: 0x00E5FF, activeHex: '#00E5FF', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF3864, wrongHex: '#FF3864', base: 0x1C2733, baseHex: '#1C2733', edge: 0x33455A },

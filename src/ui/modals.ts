@@ -6,7 +6,6 @@ import { updateComboUI, showMessage, renderStatsBar } from './hud';
 import { resetAnimTime, loopState } from '../render/loop';
 import { isReducedMotion, toggleReducedMotion } from '../reducedMotion';
 import { updateMenuText } from './menu';
-import { startMenuAmbient } from '../audio';
 import { stopGameplayAudio } from '../audioUnlocks';
 import { registerOnboardingSkipHandler } from './onboarding';
 
@@ -18,30 +17,23 @@ registerOnboardingSkipHandler(() => returnToMenu());
 registerShowResultsScreen(showResultsScreen);
 
 export function returnToMenu(): void {
-  (document.getElementById('results-screen')  as HTMLElement).style.display = 'none';
-  (document.getElementById('pause-screen')    as HTMLElement).style.display = 'none';
-  (document.getElementById('profile-screen')  as HTMLElement).style.display = 'none';
-  (document.getElementById('forge-screen')    as HTMLElement).style.display = 'none';
-  (document.getElementById('store-screen')    as HTMLElement).style.display = 'none';
-  (document.getElementById('ui-layer')        as HTMLElement).style.display = 'flex';
-  (document.getElementById('ui-layer')        as HTMLElement).style.opacity  = '1';
+  (document.getElementById('results-screen') as HTMLElement).style.display = 'none';
+  (document.getElementById('pause-screen')   as HTMLElement).style.display = 'none';
+  (document.getElementById('profile-screen') as HTMLElement).style.display = 'none';
+  (document.getElementById('forge-screen')   as HTMLElement).style.display = 'none';
+  (document.getElementById('store-screen')   as HTMLElement).style.display = 'none';
+  (document.getElementById('ui-layer')       as HTMLElement).style.display = 'flex';
+  (document.getElementById('ui-layer')       as HTMLElement).style.opacity  = '1';
 
-  // Show bottom sheet + hint; hide gameplay HUD elements
-  (document.getElementById('menu-sheet')      as HTMLElement).style.display = 'flex';
-  (document.getElementById('controls-hint')   as HTMLElement).style.display = 'block';
-  (document.getElementById('header-balance')  as HTMLElement).style.display = 'flex';
-  (document.getElementById('stats-bar')       as HTMLElement).style.display = 'none';
+  // Hide gameplay HUD; show menu header and sheet
+  (document.getElementById('gameplay-hud')  as HTMLElement).style.display = 'none';
+  (document.getElementById('menu-topbar')   as HTMLElement).style.display = 'flex';
+  (document.getElementById('menu-sheet')    as HTMLElement).style.display = 'flex';
+  (document.getElementById('controls-hint') as HTMLElement).style.display = 'block';
 
-  const container = document.getElementById('canvas-container') as HTMLElement;
-  container.style.filter = 'none';
+  (document.getElementById('canvas-container') as HTMLElement).style.filter = 'none';
 
-  const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
-  pauseBtn.style.display = 'none';
-
-  const stressBarContainer = document.getElementById('stress-bar-container') as HTMLElement;
-  stressBarContainer.style.display = 'none';
-
-  // Clear gameplay message
+  // Clear gameplay message and combo
   showMessage('', 'var(--text)');
   updateComboUI();
   renderStatsBar();
@@ -51,9 +43,8 @@ export function returnToMenu(): void {
   // Refresh streak display and daily row state
   updateMenuText();
 
-  // Stop any active gameplay audio layers; start (or resume) menu ambient
+  // Stop any active gameplay audio layers
   stopGameplayAudio();
-  startMenuAmbient();
 }
 
 export function setupModalListeners(): void {

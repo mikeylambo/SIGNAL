@@ -43,8 +43,44 @@
 
         #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; transition: filter 0.3s ease; }
 
-        #stress-bar-container { position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: rgba(255,255,255,0.1); z-index: 20; }
-        #stress-bar { height: 100%; width: 100%; background-color: var(--active); box-shadow: 0 0 10px var(--active); transition: width 0.1s linear, background-color 0.3s; transform-origin: left; }
+        /* ── Gameplay HUD bar ─────────────────────────────────────────────────── */
+        #gameplay-hud {
+            display: none; /* shown by JS when gameplay starts */
+            flex-direction: column;
+            width: 100%;
+            box-sizing: border-box;
+            background: rgba(5,8,13,0.78);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #hud-inner {
+            display: flex; align-items: center;
+            height: 52px;
+            padding: 0 12px;
+            padding-top: var(--sat, 0px);
+            gap: 6px;
+        }
+        #hud-left {
+            flex: 1; min-width: 0;
+            font-family: var(--font-mono); font-size: 0.6rem;
+            letter-spacing: 1.5px; color: var(--text-muted);
+            text-align: left; text-transform: uppercase;
+            overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+        }
+        #hud-right {
+            flex: 1; display: flex; align-items: center;
+            justify-content: flex-end; gap: 8px;
+        }
+        #hud-right-stats {
+            font-family: var(--font-mono); font-size: 0.6rem;
+            color: var(--text-muted); white-space: nowrap;
+            display: flex; gap: 4px; align-items: center;
+        }
+        #hud-right-stats span { color: var(--text); }
+        #stress-bar-container { width: 100%; height: 2px; background: rgba(255,255,255,0.08); }
+        #stress-bar { height: 100%; width: 100%; background-color: var(--active); transition: width 0.1s linear, background-color 0.3s; transform-origin: left; }
 
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
@@ -83,10 +119,14 @@
         .header-stats-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 
         #combo-readout {
+            position: absolute;
+            top: calc(var(--sat, 0px) + 58px);
+            left: 50%; transform: translateX(-50%);
+            z-index: 12; pointer-events: none;
             display: flex; align-items: baseline; gap: 6px;
             font-family: var(--font-mono); font-weight: 700;
-            background: rgba(0,0,0,0.45); padding: 3px 12px; border-radius: 3px;
-            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(0,0,0,0.55); padding: 3px 12px; border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.08);
         }
         #combo-readout .combo-num { font-size: 1.1rem; color: var(--active); text-shadow: 0 0 12px var(--active); line-height: 1; }
         #combo-readout .combo-label { font-size: 0.6rem; letter-spacing: 2.5px; color: var(--text-muted); }
@@ -104,13 +144,13 @@
         }
         .score-popup.rise { transform: translate(-50%, -180%); opacity: 0; }
 
-        /* #message is a floating gameplay overlay — hidden during menu via opacity */
+        /* #message is the center zone of the gameplay HUD bar */
         #message {
-            position: absolute; top: 72px; left: 0; right: 0;
-            font-family: var(--font-display); font-size: 1.1rem; font-weight: 700;
-            letter-spacing: 2px; text-transform: uppercase; text-align: center;
+            flex: 2; text-align: center;
+            font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700;
+            letter-spacing: 2.5px; text-transform: uppercase;
             transition: color 0.3s, opacity 0.2s; opacity: 0;
-            white-space: nowrap; pointer-events: none; z-index: 12;
+            white-space: nowrap; pointer-events: none;
         }
 
         button {
@@ -190,7 +230,6 @@
 
         /* ── Engage transition fade ────────────────────────────────────────────── */
         .menu-sheet-hiding { opacity: 0 !important; transition: opacity 0.2s ease !important; }
-        #stats-bar { transition: opacity 0.3s ease; }
 
         @keyframes lbPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
 
@@ -213,40 +252,42 @@
 
     <div id="canvas-container" aria-hidden="true"></div>
     <div id="screen-flash" aria-hidden="true"></div>
-    <div id="stress-bar-container" style="display:none;" aria-hidden="true">
-        <div id="stress-bar" role="progressbar" aria-label="Time remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"></div>
-    </div>
-
     <!-- Screen-reader-only live region for score announcements -->
     <div id="sr-score-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div>
 
     <div id="countdown-overlay" aria-live="assertive" aria-atomic="true">3</div>
 
     <div id="ui-layer">
-        <div class="header">
+        <!-- Menu-only top bar: wordmark + signal balance -->
+        <div id="menu-topbar" class="header">
             <div><h1 aria-label="Signal">SIG<span class="h1-accent">NAL</span></h1></div>
-
-            <!-- Gameplay stats — shown during a run, hidden in menu -->
-            <div class="header-stats-col">
-                <div class="stats" id="stats-bar" role="status" aria-live="polite" aria-label="Game stats" style="display:none;"></div>
-                <div id="combo-readout" style="display:none;" aria-hidden="true">
-                    <span class="combo-num">0</span><span class="combo-label">COMBO</span>
-                </div>
-            </div>
-
-            <!-- Currency balance — shown in menu, hidden during a run -->
             <div id="header-balance" style="
                 font-family:var(--font-mono); font-size:0.78rem;
                 font-weight:600; color:var(--currency);
                 display:flex; align-items:center; gap:5px;">
                 <span id="header-signal-val">0</span>⟠
             </div>
-
-            <button id="pause-btn" class="icon-btn" style="display:none;" aria-label="Pause">||</button>
         </div>
 
-        <!-- Gameplay message ("Observe", "Execute", etc.) — hidden in menu via opacity -->
-        <div id="message" role="status" aria-live="polite"></div>
+        <!-- Gameplay HUD bar (hidden in menu) -->
+        <div id="gameplay-hud">
+            <div id="hud-inner">
+                <div id="hud-left"><span id="hud-mode"></span></div>
+                <div id="message" role="status" aria-live="polite"></div>
+                <div id="hud-right">
+                    <div id="hud-right-stats"></div>
+                    <button id="pause-btn" class="icon-btn" style="display:none; pointer-events:auto;" aria-label="Pause">||</button>
+                </div>
+            </div>
+            <div id="stress-bar-container" style="display:none;" aria-hidden="true">
+                <div id="stress-bar" role="progressbar" aria-label="Time remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"></div>
+            </div>
+        </div>
+
+        <!-- Combo pill — absolutely positioned just below HUD bar -->
+        <div id="combo-readout" style="display:none;" aria-hidden="true">
+            <span class="combo-num">0</span><span class="combo-label">COMBO</span>
+        </div>
 
         <!-- Floating hint — sits just above the sheet, hidden during gameplay -->
         <div id="controls-hint" style="
@@ -313,6 +354,15 @@
                 font-family:var(--font-display); font-size:0.95rem;
                 font-weight:800; letter-spacing:3px; cursor:pointer;
                 text-transform:uppercase;">Engage</button>
+
+            <!-- How to Play — opt-in tutorial -->
+            <button id="how-to-play-btn" style="
+                background:none; border:none; padding:6px 0; width:100%;
+                font-family:var(--font-mono); font-size:0.68rem;
+                color:var(--text-muted); letter-spacing:1.5px;
+                cursor:pointer; text-align:center; text-transform:uppercase;">
+                How to Play
+            </button>
 
             <!-- Daily Calibration row — two states: available / complete -->
             <div id="daily-row" role="button" tabindex="0" style="
@@ -385,6 +435,15 @@
 
             <!-- Visual tab (all existing Forge content) -->
             <div id="settings-content-visual" style="display: none;">
+                <!-- Custom palette slot selector -->
+                <div style="margin-bottom: 14px;">
+                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">CUSTOM PALETTE SLOT</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="btn-small custom-slot-btn" data-slot="custom1" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Custom 1</button>
+                        <button class="btn-small custom-slot-btn" data-slot="custom2" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Custom 2</button>
+                        <button class="btn-small custom-slot-btn" data-slot="custom3" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Custom 3</button>
+                    </div>
+                </div>
                 <!-- Colorblind-safe presets — one-tap starting points to customize from -->
                 <div style="margin-bottom: 14px;">
                     <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">PRESETS</div>

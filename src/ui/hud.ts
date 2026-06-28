@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { state } from '../state';
-import { getSignal, profile } from '../save';
+import { getSignal } from '../save';
 import { camera } from '../render/scene';
 import { PROTOCOLS, PACINGS } from '../game/protocols';
 
@@ -15,7 +15,7 @@ export function showMessage(text: string, color: string): void {
 export function updateComboUI(): void {
   const el = document.getElementById('combo-readout');
   if (!el) return;
-  if (state.combo >= 3) {
+  if (state.combo >= 2) {
     el.style.display = 'flex';
     const numEl = el.querySelector('.combo-num');
     if (numEl) numEl.textContent = String(state.combo);
@@ -28,7 +28,7 @@ export function updateComboUI(): void {
 }
 
 export function resetCombo(): void {
-  if (state.combo >= 3) {
+  if (state.combo >= 2) {
     const el = document.getElementById('combo-readout');
     if (el) {
       el.classList.add('combo-break');
@@ -70,16 +70,14 @@ export function updateTimerUI(): void {
 }
 
 export function updateStatsUI(): void {
-  const lvlEl = document.getElementById('val-lvl');
-  const scoreEl = document.getElementById('val-score');
+  const lvlEl    = document.getElementById('val-lvl');
+  const scoreEl  = document.getElementById('val-score');
   const streakEl = document.getElementById('val-streak');
   const clearsEl = document.getElementById('val-clears');
-  if (lvlEl) lvlEl.textContent = String(state.level);
-  if (scoreEl) scoreEl.textContent = String(state.score);
+  if (lvlEl)    lvlEl.textContent    = String(state.level);
+  if (scoreEl)  scoreEl.textContent  = String(state.score);
   if (streakEl) streakEl.textContent = String(state.streak);
   if (clearsEl) clearsEl.textContent = String(state.clears);
-  const fragDisplay = document.querySelector('.currency-display span');
-  if (fragDisplay && !state.isDailyRun) fragDisplay.textContent = String(getSignal());
 }
 
 export function updateHapticsToggleText(): void {
@@ -94,20 +92,33 @@ export function updateHapticsToggleText(): void {
 }
 
 export function renderStatsBar(): void {
-  const statsBar = document.getElementById('stats-bar');
-  if (!statsBar) return;
+  const hudMode  = document.getElementById('hud-mode');
+  const hudStats = document.getElementById('hud-right-stats');
+  if (!hudMode || !hudStats) return;
+
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
-  let html = `<div class="currency-display"><span>${getSignal()}</span>&#x27E0;</div>`;
-  if (pPace.id === 'classic') html += `<div>Lvl <span id="val-lvl">${state.level}</span></div><div>Pts <span id="val-score">${state.score}</span></div>`;
-  if (pPace.id === 'zen')     html += `<div>Lvl <span id="val-lvl">${state.level}</span></div><div>Streak <span id="val-streak">${state.streak}</span></div>`;
-  if (pPace.id === 'sprint')  html += `<div>Clears <span id="val-clears">${state.clears}</span></div><div>Pts <span id="val-score">${state.score}</span></div>`;
-  if (pMode.id === 'nback')   html = `<div class="currency-display"><span>${getSignal()}</span>&#x27E0;</div><div>2-Back Lvl <span id="val-lvl">${state.level}</span></div><div>Pts <span id="val-score">${state.score}</span></div>`;
-  if (state.isDailyRun)       html = `<div style="color:var(--wrong)">DAILY CALIBRATION</div><div>Lvl <span id="val-lvl">${state.level}</span></div><div>Pts <span id="val-score">${state.score}</span></div>`;
-
-  statsBar.innerHTML = html;
-  if (profile.currentStreak >= 2) {
-    statsBar.innerHTML += `<div style="color:var(--combo);">${profile.currentStreak}🔥</div>`;
+  // Left zone: mode label
+  if (state.isDailyRun) {
+    hudMode.textContent = 'Daily Cal';
+    hudMode.style.color = 'var(--wrong)';
+  } else if (pMode.id === 'nback') {
+    hudMode.textContent = '2-Back';
+    hudMode.style.color = 'var(--combo)';
+  } else {
+    hudMode.textContent = pMode.name;
+    hudMode.style.color = 'var(--text-muted)';
   }
+
+  // Right zone: pacing-specific stats
+  if (pPace.id === 'zen') {
+    hudStats.innerHTML = `Lv <span id="val-lvl">${state.level}</span> · <span id="val-streak">${state.streak}</span>`;
+  } else if (pPace.id === 'sprint') {
+    hudStats.innerHTML = `×<span id="val-clears">${state.clears}</span> · Pts <span id="val-score">${state.score}</span>`;
+  } else {
+    hudStats.innerHTML = `Lv <span id="val-lvl">${state.level}</span> · Pts <span id="val-score">${state.score}</span>`;
+  }
+
+  void getSignal; // suppress unused import until signal display is added to HUD
 }

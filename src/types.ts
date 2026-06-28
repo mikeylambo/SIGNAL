@@ -43,6 +43,9 @@ export interface SavedProfile {
     volume: number;
   };
   unlockedAudioFeatures: string[];
+  audioFeatureEnabled: Record<string, boolean>;
+  customPalettes: Record<string, CustomPalette>;
+  activeCustomSlot: string;
   hasCompletedOnboarding: boolean;
 }
 

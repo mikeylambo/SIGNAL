@@ -1,17 +1,26 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 // No beforeEach seed — these tests intentionally start with fresh localStorage
 // to exercise the onboarding flow.
 
 const ONBOARDING_TIMEOUT_MS = 20000; // countdown + constructing + observe phase
+const SPLASH_TIMEOUT_MS = 5000;      // splash shows 2s + fade 0.5s + buffer
 
-test('fresh localStorage triggers onboarding — menu sheet is hidden, countdown appears', async ({ page }) => {
+async function clickHowToPlay(page: Page) {
+  // Splash blocks clicks for ~2s; Playwright retries until the element is actionable
+  await page.click('#how-to-play-btn', { timeout: SPLASH_TIMEOUT_MS });
+}
+
+test('How to Play triggers onboarding — menu sheet is hidden, countdown appears', async ({ page }) => {
   await page.goto('/');
+
+  // Trigger tutorial via opt-in button (waits for splash to clear)
+  await clickHowToPlay(page);
 
   // Menu sheet must be hidden — onboarding round replaced it
   await expect(page.locator('#menu-sheet')).toBeHidden();
 
-  // Countdown overlay appears immediately
+  // Countdown overlay appears
   await expect(page.locator('#countdown-overlay')).toBeVisible();
 
   // Onboarding hint overlay must be present
@@ -20,6 +29,9 @@ test('fresh localStorage triggers onboarding — menu sheet is hidden, countdown
 
 test('skip button on onboarding hint lands on main menu and persists the flag', async ({ page }) => {
   await page.goto('/');
+
+  // Trigger onboarding via How to Play
+  await clickHowToPlay(page);
 
   // Wait for the hint overlay to render
   await expect(page.locator('#onboarding-hint')).toBeVisible({ timeout: 3000 });
@@ -42,7 +54,10 @@ test('skip button on onboarding hint lands on main menu and persists the flag', 
 test('completing the onboarding round shows "Enter SIGNAL →" and landing on menu sets the flag', async ({ page }) => {
   await page.goto('/');
 
-  // Onboarding round starts automatically — wait for Execute phase
+  // Trigger onboarding via How to Play
+  await clickHowToPlay(page);
+
+  // Wait for Execute phase — pause button becomes visible
   await expect(page.locator('#pause-btn')).toBeVisible({ timeout: ONBOARDING_TIMEOUT_MS });
 
   // Verify normal run-again/menu buttons are absent during onboarding

@@ -24,6 +24,11 @@ export function resetAnimTime(): void {
   lastAnimFrameTime = 0;
 }
 
+export function resetPivotRotation(): void {
+  pivotGroup.rotation.x = 0;
+  pivotGroup.rotation.y = 0;
+}
+
 export function startRenderLoop(): void {
   if (loopRunning) return;
   loopRunning = true;

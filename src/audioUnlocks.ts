@@ -1,4 +1,14 @@
 import { profile, saveProfile, spendSignal, getSignal } from './save';
+
+export function isAudioFeatureEnabled(id: string): boolean {
+  return profile.audioFeatureEnabled?.[id] !== false;
+}
+
+export function setAudioFeatureEnabled(id: string, enabled: boolean): void {
+  if (!profile.audioFeatureEnabled) profile.audioFeatureEnabled = {};
+  profile.audioFeatureEnabled[id] = enabled;
+  saveProfile();
+}
 import { getAudioCtx, playTone, getVolume } from './audio';
 
 // ── Unlock catalogue ───────────────────────────────────────────────────────────
@@ -51,7 +61,7 @@ export function buyAudioUnlock(id: string, price: number): boolean {
 // "spatial" is not purchased.
 
 export function spatialPan(cubeIndex: number): number {
-  if (!isAudioUnlocked('spatial')) return 0;
+  if (!isAudioUnlocked('spatial') || !isAudioFeatureEnabled('spatial')) return 0;
   const col = cubeIndex % 3;        // 0, 1, 2
   return (col - 1) * 0.75;          // -0.75 | 0 | 0.75
 }
@@ -66,7 +76,7 @@ let binauralOut: GainNode | null = null;
 let binauralRunning = false;
 
 export function startBinaural(): void {
-  if (binauralRunning || !isAudioUnlocked('binaural')) return;
+  if (binauralRunning || !isAudioUnlocked('binaural') || !isAudioFeatureEnabled('binaural')) return;
   const ctx = getAudioCtx();
   if (!ctx) return;
   binauralRunning = true;
@@ -127,7 +137,7 @@ let gammaOut: GainNode | null = null;
 let gammaRunning = false;
 
 export function startGamma(): void {
-  if (gammaRunning || !isAudioUnlocked('gamma')) return;
+  if (gammaRunning || !isAudioUnlocked('gamma') || !isAudioFeatureEnabled('gamma')) return;
   const ctx = getAudioCtx();
   if (!ctx) return;
   gammaRunning = true;

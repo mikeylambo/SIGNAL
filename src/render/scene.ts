@@ -38,13 +38,19 @@ export const particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 // Called at init and on every resize.
 export function adjustCameraForViewport(): void {
   const portrait = window.innerWidth < window.innerHeight;
-  const small    = window.innerHeight < 700;
-  if (portrait || small) {
-    camera.fov = 58;
-    camera.position.set(0, 8, 16);
+  const small    = window.innerHeight < 667;
+  if (small) {
+    camera.fov = 68;
+    camera.position.set(0, 4, 18);
+    camera.lookAt(0, 1.5, 0);
+  } else if (portrait) {
+    camera.fov = 62;
+    camera.position.set(0, 3.5, 16);
+    camera.lookAt(0, 1, 0);
   } else {
     camera.fov = 45;
-    camera.position.set(0, 8, 12);
+    camera.position.set(0, 2, 12);
+    camera.lookAt(0, 0.5, 0);
   }
   camera.updateProjectionMatrix();
 }

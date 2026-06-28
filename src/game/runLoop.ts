@@ -3,8 +3,8 @@ import { state } from '../state';
 import { PROTOCOLS, PACINGS } from './protocols';
 import { cubes, setCubeState, createBoard } from '../render/board';
 import { camera, spawnParticles } from '../render/scene';
-import { loopState, cameraShake, flashScreen } from '../render/loop';
-import { playTone, haptic, stopMenuAmbient, initAudio } from '../audio';
+import { loopState, cameraShake, flashScreen, resetPivotRotation } from '../render/loop';
+import { playTone, haptic, initAudio } from '../audio';
 import { startGameplayAudio, stopGameplayAudio, spatialPan } from '../audioUnlocks';
 import { showOnboardingHint, fadeOnboardingHint } from '../ui/onboarding';
 import { addSignal, recordRun, t, profile, saveProfile } from '../save';
@@ -95,20 +95,22 @@ export async function startOnboardingRound(): Promise<void> {
   state.isOnboarding = true;
   state.isDailyRun = false;
 
-  const uiLayer           = document.getElementById('ui-layer')!;
-  const resultsScreen     = document.getElementById('results-screen')!;
+  const uiLayer        = document.getElementById('ui-layer')!;
+  const resultsScreen  = document.getElementById('results-screen')!;
+  const gameplayHud    = document.getElementById('gameplay-hud') as HTMLElement;
   const stressBarContainer = document.getElementById('stress-bar-container')!;
-  const stressBar         = document.getElementById('stress-bar')!;
+  const stressBar      = document.getElementById('stress-bar')!;
 
   resultsScreen.style.display = 'none';
   uiLayer.style.display       = 'flex';
   uiLayer.style.opacity       = '1';
 
-  (document.getElementById('menu-sheet')     as HTMLElement).style.display = 'none';
-  (document.getElementById('controls-hint')  as HTMLElement).style.display = 'none';
-  (document.getElementById('header-balance') as HTMLElement).style.display = 'none';
-  (document.getElementById('stats-bar')      as HTMLElement).style.display = 'flex';
+  (document.getElementById('menu-sheet')    as HTMLElement).style.display = 'none';
+  (document.getElementById('controls-hint') as HTMLElement).style.display = 'none';
+  (document.getElementById('menu-topbar')   as HTMLElement).style.display = 'none';
+  gameplayHud.style.display = 'flex';
 
+  resetPivotRotation();
   state.level = 1; state.score = 0; state.streak = 0; state.maxStreak = 0;
   state.mistakes = 0; state.clears = 0; state.earnedFragments = 0;
   state.combo = 0; state.maxCombo = 0;
@@ -124,7 +126,6 @@ export async function startOnboardingRound(): Promise<void> {
 
   showOnboardingHint();
 
-  stopMenuAmbient();
   startGameplayAudio();
 
   createBoard();
@@ -141,30 +142,31 @@ export async function initGame(): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
-  const resultsScreen = document.getElementById('results-screen')!;
-  const uiLayer = document.getElementById('ui-layer')!;
+  const resultsScreen      = document.getElementById('results-screen')!;
+  const uiLayer            = document.getElementById('ui-layer')!;
   const stressBarContainer = document.getElementById('stress-bar-container')!;
-  const stressBar = document.getElementById('stress-bar')!;
+  const stressBar          = document.getElementById('stress-bar')!;
+  const gameplayHud        = document.getElementById('gameplay-hud') as HTMLElement;
 
   resultsScreen.style.display = 'none';
   uiLayer.style.display = 'flex';
   uiLayer.style.opacity = '1';
 
-  // Transition audio: stop menu ambient, start any purchased gameplay layers
-  stopMenuAmbient();
+  // Start any purchased gameplay audio layers
   startGameplayAudio();
+
+  resetPivotRotation();
 
   // Fade menu sheet out over 200ms, then hide it
   const menuSheet = document.getElementById('menu-sheet') as HTMLElement;
   menuSheet.classList.add('menu-sheet-hiding');
   setTimeout(() => { menuSheet.style.display = 'none'; menuSheet.classList.remove('menu-sheet-hiding'); }, 200);
-  (document.getElementById('controls-hint')  as HTMLElement).style.display = 'none';
-  (document.getElementById('header-balance') as HTMLElement).style.display = 'none';
+  (document.getElementById('controls-hint') as HTMLElement).style.display = 'none';
+  (document.getElementById('menu-topbar')   as HTMLElement).style.display = 'none';
 
-  // Show stats bar at opacity 0; transition to 1 after the 200ms menu fade
-  const statsBar = document.getElementById('stats-bar') as HTMLElement;
-  statsBar.style.opacity = '0';
-  statsBar.style.display = 'flex';
+  // Show gameplay HUD at opacity 0; transition to 1 after the 200ms menu fade
+  gameplayHud.style.opacity = '0';
+  gameplayHud.style.display = 'flex';
 
   state.level = 1; state.score = 0; state.streak = 0; state.maxStreak = 0;
   state.mistakes = 0; state.clears = 0; state.earnedFragments = 0;
@@ -189,7 +191,7 @@ export async function initGame(): Promise<void> {
 
   createBoard();
   await delay(200);
-  statsBar.style.opacity = '1';  // fade HUD in (CSS transition: opacity 0.3s)
+  gameplayHud.style.opacity = '1';  // fade HUD in (CSS transition: opacity 0.3s)
   await runCountdown();
 
   if (pPace.id === 'sprint' && pMode.id !== 'nback') {
@@ -535,6 +537,7 @@ export function gameOver(reasonText: string): void {
 
 export async function showResultsScreen(): Promise<void> {
   stopGameplayAudio();
+  createBoard();
 
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
