@@ -8,7 +8,7 @@ export const loopState = {
   isDragging: false,
   dragThreshold: false,
   prevMouse: { x: 0, y: 0 },
-  targetRot: { x: Math.PI / 6, y: -Math.PI / 8 },
+  targetRot: { x: 0, y: 0 },
   mouseX: 0,
   mouseY: 0,
   hitstopEndTime: 0,
@@ -25,9 +25,9 @@ export function resetAnimTime(): void {
 }
 
 export function resetPivotRotation(): void {
-  pivotGroup.rotation.x = Math.PI / 6;
-  pivotGroup.rotation.y = -Math.PI / 8;
-  loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
+  // Sync targetRot to current pivot angle — no snap
+  loopState.targetRot.x = pivotGroup.rotation.x;
+  loopState.targetRot.y = pivotGroup.rotation.y;
 }
 
 export function startRenderLoop(): void {
@@ -66,16 +66,10 @@ export function animate(timestamp: number): void {
     if (gridFloor.position.z > 1) gridFloor.position.z = 0;
   }
 
+  // Grid stays wherever the player left it — only drag updates targetRot.
   const rotLerp = 1 - Math.pow(1 - 0.1, dt60);
-  const isMenuIdle = !state.isPlayable && !state.timerActive && !state.nBackActive
-                     && !state.isPaused && !state.isOnboarding;
-  if (isMenuIdle && !reducedMotion) {
-    pivotGroup.rotation.y += 0.003 * dt60;
-    pivotGroup.rotation.x = Math.PI / 6 + Math.sin(timestamp * 0.0003) * 0.08;
-  } else {
-    pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
-    pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
-  }
+  pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
+  pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
 
   if (!loopState.isDragging && !reducedMotion) {
     const driftLerp = 1 - Math.pow(1 - 0.05, dt60);
@@ -119,10 +113,6 @@ export function flashScreen(color: string): void {
   el.classList.add('flash-active');
 }
 
-// Cancellation token: each cameraShake call increments this. A tick closure
-// captures the token at the moment it's created; if a newer shake starts
-// before the old one finishes, the old tick sees a stale token and exits,
-// preventing two concurrent loops from fighting over camera.position.
 let shakeGeneration = 0;
 
 export function cameraShake(intensity: number, durationMs: number, onComplete?: () => void): void {
