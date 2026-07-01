@@ -70,7 +70,7 @@ export function animate(timestamp: number): void {
                      && !state.isPaused && !state.isOnboarding;
   if (isMenuIdle && !reducedMotion) {
     pivotGroup.rotation.y += 0.003 * dt60;
-    pivotGroup.rotation.x = Math.sin(timestamp * 0.0003) * 0.08;
+    pivotGroup.rotation.x = Math.PI / 6 + Math.sin(timestamp * 0.0003) * 0.08;
   } else {
     pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
     pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;

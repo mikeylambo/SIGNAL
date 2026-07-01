@@ -91,6 +91,21 @@ window.addEventListener('load', () => {
   setupMenuListeners();
   setupModalListeners();
 
+  // Measure menu sheet height → CSS var so controls-hint sits just above it.
+  function updateMenuSheetHeight(): void {
+    const sheet = document.getElementById('menu-sheet');
+    if (sheet) {
+      const h = sheet.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--menu-sheet-h', `${h + 12}px`);
+    }
+  }
+  const sheetEl = document.getElementById('menu-sheet');
+  if (sheetEl && typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(updateMenuSheetHeight).observe(sheetEl);
+  }
+  updateMenuSheetHeight();
+  window.addEventListener('resize', updateMenuSheetHeight);
+
   document.getElementById('replay-intro-btn')!.addEventListener('click', () => {
     profile.hasCompletedOnboarding = false;
     profile.hasSeenOnboarding = false;
