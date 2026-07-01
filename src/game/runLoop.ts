@@ -191,12 +191,16 @@ export async function startOnboardingRound(): Promise<void> {
   const skipBtn = document.createElement('button');
   skipBtn.id = 'ob-skip-btn';
   skipBtn.textContent = 'Skip tutorial';
+  // Measure the HUD's actual rendered height rather than guessing a fixed
+  // offset — a hardcoded top:24px happened to land inside the HUD's own
+  // vertical band (HUD height is ~52px + the safe-area inset), which is what
+  // caused "Lv 1 · Pts 10" to overlap the skip button's left edge.
+  const hudBottom = gameplayHud.getBoundingClientRect().bottom;
   skipBtn.style.cssText = [
     // width:auto is required here — the global `button` rule sets width:100%,
     // and with position:fixed + only `right` set that stretches this into a
-    // full-viewport-width bar that overlaps whatever's under it (the gameplay
-    // HUD row, in this case).
-    'position:fixed;top:calc(24px + var(--sat, 0px));right:calc(18px + var(--sar, 0px));z-index:300;width:auto;',
+    // full-viewport-width bar that overlaps whatever's under it.
+    `position:fixed;top:${hudBottom + 12}px;right:calc(18px + var(--sar, 0px));z-index:300;width:auto;`,
     'padding:8px 16px;font-family:var(--font-mono);font-size:0.68rem;',
     'letter-spacing:1.5px;background:none;',
     'border:1px solid rgba(255,255,255,0.2);',
@@ -305,6 +309,27 @@ export async function startOnboardingRound(): Promise<void> {
     const onFirstTap = () => removeCallout();
     canvas?.addEventListener('pointerdown', onFirstTap, { once: true });
 
+    // handleMistake() clears onboarding hooks (_ob) before calling onMistake, by
+    // design, so a real in-progress mistake can't accidentally re-trigger itself.
+    // That means retry() MUST re-register hooks every time it hands control back
+    // to the player — otherwise the next tap (whether it's another mistake or the
+    // completing correct tap) finds no onMistake/onRoundEnd hook, falls through
+    // into normal (non-tutorial) game-over/level-complete logic, and this Step 4
+    // promise — which only resolves via one of those two hooks — never resolves.
+    // That's the "tutorial just hangs, but I can still drag the camera" bug.
+    const registerHooks = (): void => {
+      setOnboardingHooks({
+        onMistake: () => { void retry(); },
+        onRoundEnd: () => {
+          clearOnboardingHooks();
+          canvas?.removeEventListener('pointerdown', onFirstTap);
+          removeCallout();
+          _stepResolve = null;
+          resolve();
+        },
+      });
+    };
+
     const retry = async () => {
       retryCount++;
       state.isPlayable = false;
@@ -349,18 +374,10 @@ export async function startOnboardingRound(): Promise<void> {
       state.userClicks = [];
       state.isPlayable = true;
       canvas?.addEventListener('pointerdown', onFirstTap, { once: true });
+      registerHooks();
     };
 
-    setOnboardingHooks({
-      onMistake: () => { void retry(); },
-      onRoundEnd: () => {
-        clearOnboardingHooks();
-        canvas?.removeEventListener('pointerdown', onFirstTap);
-        removeCallout();
-        _stepResolve = null;
-        resolve();
-      },
-    });
+    registerHooks();
   });
   if (done) return;
   state.isPlayable = false;

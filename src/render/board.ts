@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CubeState } from '../types';
-import { scene, boardGroup, camera, gridFloor } from './scene';
+import { scene, boardGroup, gridFloor, adjustCameraForViewport } from './scene';
 import { t } from '../save';
 import { state } from '../state';
 
@@ -91,27 +91,10 @@ export function createBoard(): void {
     }
   }
 
-  // Reposition camera to fit the grid
-  // gridFloor is needed to silence the unused-import warning; it's used in scene.ts
+  // Reposition camera to fit the (possibly resized) grid. Single shared
+  // implementation in scene.ts — see adjustCameraForViewport() for why this
+  // used to be duplicated here.
   void gridFloor;
   void scene;
-
-  const portrait  = window.innerWidth < window.innerHeight;
-  const small     = window.innerHeight < 667;
-  const baseZ     = small ? 18 : portrait ? 15 : 14;
-  const baseY     = small ? 6 : portrait ? 5.5 : 5;
-  const gridScale = Math.max(1, state.gridSize / 3);
-
-  // Dynamic lookAt: shift target down proportional to sheet height so the
-  // grid stays centred in the space above the sheet on any screen size.
-  const sheetEl  = document.getElementById('menu-sheet');
-  const sheetFrac = sheetEl
-    ? sheetEl.getBoundingClientRect().height / window.innerHeight
-    : 0.45;
-  const lookY = -(sheetFrac * 3.5);
-
-  camera.position.set(0, baseY * gridScale, baseZ * gridScale);
-  camera.lookAt(0, lookY, 0);
-  camera.zoom = 1;
-  camera.updateProjectionMatrix();
+  adjustCameraForViewport();
 }

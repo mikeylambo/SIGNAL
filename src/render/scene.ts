@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 import { t } from '../save';
+import { state } from '../state';
 
 // Bloom resolution scales with detected device tier so mid-tier mobile
 // doesn't spend 60% of its frame budget on a blur effect.
@@ -37,7 +38,10 @@ export const particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 // Position camera so the grid sits in the upper portion of the viewport,
 // above the bottom sheet UI. On mobile we measure the sheet height and
 // use it to compute a lookAt offset that keeps the grid visually centred
-// in the space above the sheet on all screen sizes.
+// in the space above the sheet on all screen sizes. Also scales distance
+// with the current grid size (createBoard() used to do this separately with
+// its own copy of this same formula — merged here so there's one place that
+// decides where the camera goes, instead of two that can disagree).
 export function adjustCameraForViewport(): void {
   const portrait = window.innerWidth < window.innerHeight;
   const small    = window.innerHeight < 667;
@@ -54,19 +58,17 @@ export function adjustCameraForViewport(): void {
   // the upper region. More sheet → more shift.
   const lookAtY = -(sheetFrac * 3.5);
 
-  if (small) {
-    camera.fov = 72;
-    camera.position.set(0, 6, 18);
-    camera.lookAt(0, lookAtY, 0);
-  } else if (portrait) {
-    camera.fov = 62;
-    camera.position.set(0, 5.5, 15);
-    camera.lookAt(0, lookAtY, 0);
-  } else {
-    camera.fov = 50;
-    camera.position.set(0, 5, 14);
-    camera.lookAt(0, lookAtY, 0);
-  }
+  const baseZ = small ? 18 : portrait ? 15 : 14;
+  const baseY = small ? 6 : portrait ? 5.5 : 5;
+  const fov   = small ? 72 : portrait ? 62 : 50;
+  // Pull back as the grid grows beyond the default 3x3 so larger boards
+  // (later levels) still fit on screen.
+  const gridScale = Math.max(1, state.gridSize / 3);
+
+  camera.fov = fov;
+  camera.position.set(0, baseY * gridScale, baseZ * gridScale);
+  camera.lookAt(0, lookAtY, 0);
+  camera.zoom = 1;
   camera.updateProjectionMatrix();
 }
 
