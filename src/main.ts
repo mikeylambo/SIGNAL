@@ -104,7 +104,10 @@ window.addEventListener('load', () => {
     new ResizeObserver(updateMenuSheetHeight).observe(sheetEl);
   }
   updateMenuSheetHeight();
-  window.addEventListener('resize', updateMenuSheetHeight);
+  window.addEventListener('resize', () => {
+    updateMenuSheetHeight();
+    adjustCameraForViewport();
+  });
 
   document.getElementById('replay-intro-btn')!.addEventListener('click', () => {
     profile.hasCompletedOnboarding = false;

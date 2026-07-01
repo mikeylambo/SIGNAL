@@ -98,12 +98,20 @@ export function createBoard(): void {
 
   const portrait  = window.innerWidth < window.innerHeight;
   const small     = window.innerHeight < 667;
-  const lookY     = small ? -1.5 : portrait ? -1.5 : -2;
-  const baseZ     = small ? 18 : portrait ? 16 : 14;
+  const baseZ     = small ? 18 : portrait ? 15 : 14;
   const baseY     = small ? 6 : portrait ? 5.5 : 5;
   const gridScale = Math.max(1, state.gridSize / 3);
+
+  // Dynamic lookAt: shift target down proportional to sheet height so the
+  // grid stays centred in the space above the sheet on any screen size.
+  const sheetEl  = document.getElementById('menu-sheet');
+  const sheetFrac = sheetEl
+    ? sheetEl.getBoundingClientRect().height / window.innerHeight
+    : 0.45;
+  const lookY = -(sheetFrac * 3.5);
+
   camera.position.set(0, baseY * gridScale, baseZ * gridScale);
-  camera.lookAt(0, lookY * gridScale, 0);
+  camera.lookAt(0, lookY, 0);
   camera.zoom = 1;
   camera.updateProjectionMatrix();
 }

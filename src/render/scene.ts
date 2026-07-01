@@ -34,23 +34,38 @@ export let bloomEnabled = false;
 
 export const particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 
-// Camera looks at a point below world origin so the grid sits in the upper
-// portion of the viewport, clear of the bottom sheet UI.
+// Position camera so the grid sits in the upper portion of the viewport,
+// above the bottom sheet UI. On mobile we measure the sheet height and
+// use it to compute a lookAt offset that keeps the grid visually centred
+// in the space above the sheet on all screen sizes.
 export function adjustCameraForViewport(): void {
   const portrait = window.innerWidth < window.innerHeight;
   const small    = window.innerHeight < 667;
+
+  // How much of the viewport (0–1) is occupied by the bottom sheet?
+  // Default to 45% if the element isn't mounted yet.
+  const sheetEl = document.getElementById('menu-sheet');
+  const sheetFrac = sheetEl
+    ? sheetEl.getBoundingClientRect().height / window.innerHeight
+    : 0.45;
+
+  // We want the grid centred in the available space above the sheet.
+  // lookAtY shifts the camera target downward so the grid projects into
+  // the upper region. More sheet → more shift.
+  const lookAtY = -(sheetFrac * 3.5);
+
   if (small) {
     camera.fov = 72;
     camera.position.set(0, 6, 18);
-    camera.lookAt(0, -1.5, 0);
+    camera.lookAt(0, lookAtY, 0);
   } else if (portrait) {
-    camera.fov = 65;
-    camera.position.set(0, 5.5, 16);
-    camera.lookAt(0, -1.5, 0);
+    camera.fov = 62;
+    camera.position.set(0, 5.5, 15);
+    camera.lookAt(0, lookAtY, 0);
   } else {
     camera.fov = 50;
     camera.position.set(0, 5, 14);
-    camera.lookAt(0, -2, 0);
+    camera.lookAt(0, lookAtY, 0);
   }
   camera.updateProjectionMatrix();
 }
