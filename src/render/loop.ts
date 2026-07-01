@@ -25,8 +25,9 @@ export function resetAnimTime(): void {
 }
 
 export function resetPivotRotation(): void {
-  pivotGroup.rotation.x = 0;
-  pivotGroup.rotation.y = 0;
+  // Sync targetRot to current pivot angle — no snap on game start
+  loopState.targetRot.x = pivotGroup.rotation.x;
+  loopState.targetRot.y = pivotGroup.rotation.y;
 }
 
 export function startRenderLoop(): void {
@@ -70,8 +71,9 @@ export function animate(timestamp: number): void {
                      && !state.isPaused && !state.isOnboarding;
   if (isMenuIdle && !reducedMotion) {
     pivotGroup.rotation.y += 0.003 * dt60;
-    pivotGroup.rotation.x = Math.PI / 6 + Math.sin(timestamp * 0.0003) * 0.08;
-  } else {
+    // Drift gently from current angle — no snap to fixed position
+    pivotGroup.rotation.x += Math.sin(timestamp * 0.0003) * 0.0008 * dt60;
+  } else if (!isMenuIdle) {
     pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
     pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
   }

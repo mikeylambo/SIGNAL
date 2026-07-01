@@ -43,25 +43,34 @@ export function setOnboardingHooks(h: ObHooks): void { _ob = h; }
 export function clearOnboardingHooks(): void { _ob = {}; }
 
 export async function runCountdown(): Promise<void> {
-  return new Promise(async resolve => {
-    const countdownEl = document.getElementById('countdown-overlay')!;
-    countdownEl.style.opacity = '1';
-    for (let i = 3; i > 0; i--) {
-      countdownEl.innerText = String(i);
-      countdownEl.style.transform = 'translate(-50%, -50%) scale(1.2)';
-      playTone('tick');
-      await delay(100);
-      countdownEl.style.transform = 'translate(-50%, -50%) scale(1)';
-      await delay(700);
+  // Waits for unpause before counting elapsed time — countdown freezes while paused
+  async function pauseAwareDelay(ms: number): Promise<void> {
+    while (state.isPaused) await delay(50);
+    const start = performance.now();
+    while (true) {
+      await delay(16);
+      if (!state.isPaused && performance.now() - start >= ms) break;
     }
-    countdownEl.innerText = 'GO';
-    countdownEl.style.color = 'var(--correct)';
-    playTone('go');
-    await delay(500);
-    countdownEl.style.opacity = '0';
-    countdownEl.style.color = 'var(--active)';
-    resolve();
-  });
+  }
+
+  const countdownEl = document.getElementById('countdown-overlay')!;
+  countdownEl.style.opacity = '1';
+  for (let i = 3; i > 0; i--) {
+    while (state.isPaused) await delay(50);
+    countdownEl.innerText = String(i);
+    countdownEl.style.transform = 'translate(-50%, -50%) scale(1.2)';
+    playTone('tick');
+    await pauseAwareDelay(100);
+    countdownEl.style.transform = 'translate(-50%, -50%) scale(1)';
+    await pauseAwareDelay(700);
+  }
+  while (state.isPaused) await delay(50);
+  countdownEl.innerText = 'GO';
+  countdownEl.style.color = 'var(--correct)';
+  playTone('go');
+  await pauseAwareDelay(500);
+  countdownEl.style.opacity = '0';
+  countdownEl.style.color = 'var(--active)';
 }
 
 export function runTimer(timestamp: number): void {
