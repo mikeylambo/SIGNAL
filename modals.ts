@@ -43,8 +43,8 @@ export function returnToMenu(): void {
   // Stop any active gameplay audio layers
   stopGameplayAudio();
 
-  // Return board to flat face-on orientation for the menu
-  loopState.targetRot = { x: 0, y: 0 };
+  // Return board to isometric menu orientation
+  loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
 }
 
 export function setupModalListeners(): void {

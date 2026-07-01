@@ -8,7 +8,7 @@ export const loopState = {
   isDragging: false,
   dragThreshold: false,
   prevMouse: { x: 0, y: 0 },
-  targetRot: { x: 0, y: 0 },
+  targetRot: { x: Math.PI / 6, y: -Math.PI / 8 },
   mouseX: 0,
   mouseY: 0,
   hitstopEndTime: 0,
@@ -25,9 +25,9 @@ export function resetAnimTime(): void {
 }
 
 export function resetPivotRotation(): void {
-  pivotGroup.rotation.x = 0;
-  pivotGroup.rotation.y = 0;
-  loopState.targetRot = { x: 0, y: 0 };
+  pivotGroup.rotation.x = Math.PI / 6;
+  pivotGroup.rotation.y = -Math.PI / 8;
+  loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
 }
 
 export function startRenderLoop(): void {
@@ -71,7 +71,7 @@ export function animate(timestamp: number): void {
                      && !state.isPaused && !state.isOnboarding;
   if (isMenuIdle && !reducedMotion) {
     pivotGroup.rotation.y += 0.003 * dt60;
-    pivotGroup.rotation.x += (0 - pivotGroup.rotation.x) * rotLerp;
+    pivotGroup.rotation.x = Math.PI / 6 + Math.sin(timestamp * 0.0003) * 0.08;
   } else {
     pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
     pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;

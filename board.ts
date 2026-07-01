@@ -98,9 +98,9 @@ export function createBoard(): void {
 
   const portrait  = window.innerWidth < window.innerHeight;
   const small     = window.innerHeight < 667;
-  const lookY     = small ? 2 : portrait ? 1.5 : 1;
-  const baseZ     = small ? 16 : portrait ? 14 : 12;
-  const baseY     = small ? 6 : portrait ? 5 : 4;
+  const lookY     = small ? -1.5 : portrait ? -1.5 : -2;
+  const baseZ     = small ? 18 : portrait ? 16 : 14;
+  const baseY     = small ? 6 : portrait ? 5.5 : 5;
   const gridScale = Math.max(1, state.gridSize / 3);
   camera.position.set(0, baseY * gridScale, baseZ * gridScale);
   camera.lookAt(0, lookY * gridScale, 0);

@@ -35,24 +35,23 @@ export let bloomEnabled = false;
 export const particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 
 // Pulls the camera back on small or portrait viewports so the board isn't clipped.
-// Camera is positioned for a flatter, more face-on view of the grid,
-// and looks toward the upper half of the screen so the bottom sheet UI
-// sits below the board without overlap.
+// Camera looks at a point below the board's world origin so that when the bottom
+// sheet UI occupies the lower ~45% of the screen, the grid sits cleanly above it.
 export function adjustCameraForViewport(): void {
   const portrait = window.innerWidth < window.innerHeight;
   const small    = window.innerHeight < 667;
   if (small) {
-    camera.fov = 68;
-    camera.position.set(0, 6, 16);
-    camera.lookAt(0, 2, 0);
+    camera.fov = 72;
+    camera.position.set(0, 6, 18);
+    camera.lookAt(0, -1.5, 0);
   } else if (portrait) {
-    camera.fov = 62;
-    camera.position.set(0, 5, 14);
-    camera.lookAt(0, 1.5, 0);
+    camera.fov = 65;
+    camera.position.set(0, 5.5, 16);
+    camera.lookAt(0, -1.5, 0);
   } else {
-    camera.fov = 45;
-    camera.position.set(0, 4, 12);
-    camera.lookAt(0, 1, 0);
+    camera.fov = 50;
+    camera.position.set(0, 5, 14);
+    camera.lookAt(0, -2, 0);
   }
   camera.updateProjectionMatrix();
 }
@@ -62,7 +61,7 @@ export function initScene(container: HTMLElement): void {
   scene.fog = new THREE.FogExp2(t.bg, 0.04);
 
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, 4, 12);
+  camera.position.set(0, 5, 14);
 
   // WebGL availability check — throws a readable error instead of white-screening.
   const testCanvas = document.createElement('canvas');
