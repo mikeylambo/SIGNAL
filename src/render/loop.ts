@@ -8,7 +8,7 @@ export const loopState = {
   isDragging: false,
   dragThreshold: false,
   prevMouse: { x: 0, y: 0 },
-  targetRot: { x: Math.PI / 6, y: -Math.PI / 8 },
+  targetRot: { x: 0, y: 0 },  // only the drag handler updates this
   mouseX: 0,
   mouseY: 0,
   hitstopEndTime: 0,
@@ -66,14 +66,13 @@ export function animate(timestamp: number): void {
     if (gridFloor.position.z > 1) gridFloor.position.z = 0;
   }
 
-  const rotLerp = 1 - Math.pow(1 - 0.1, dt60);
-  const isMenuIdle = !state.isPlayable && !state.timerActive && !state.nBackActive
-                     && !state.isPaused && !state.isOnboarding;
-  if (isMenuIdle && !reducedMotion) {
-    pivotGroup.rotation.y += 0.003 * dt60;
-    // Drift gently from current angle — no snap to fixed position
-    pivotGroup.rotation.x += Math.sin(timestamp * 0.0003) * 0.0008 * dt60;
-  } else if (!isMenuIdle) {
+  // Grid stays wherever the player left it — targetRot only changes on drag.
+  {
+    const rotLerp = 1 - Math.pow(1 - 0.1, dt60);
+    pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
+    pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
+  }
+ else if (!isMenuIdle) {
     pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
     pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
   }

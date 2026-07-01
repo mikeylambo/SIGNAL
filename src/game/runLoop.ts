@@ -131,7 +131,6 @@ export async function startOnboardingRound(): Promise<void> {
   state.gridSize = 3; state.activeCount = 3; state.nBackActive = false;
   state.userClicks  = [];
   state.isPlayable  = false;
-  loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
 
   updateComboUI();
   renderStatsBar();
@@ -429,7 +428,6 @@ export async function initGame(): Promise<void> {
   updateComboUI();
 
   state.gridSize = 3; state.activeCount = 3; state.nBackActive = false;
-  loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
 
   renderStatsBar();
 
