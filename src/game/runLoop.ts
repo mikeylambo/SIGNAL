@@ -270,7 +270,14 @@ export async function startOnboardingRound(): Promise<void> {
   if (done) return;
 
   const patternSize = state.activeCount;
-  const totalCubes  = state.gridSize * state.gridSize * state.gridSize;
+  // The board is a flat gridSize x gridSize grid (see createBoard()'s x/z loop) —
+  // gridSize² valid indices, not gridSize³. Using the cubed formula here meant
+  // roughly 2 out of 3 random picks landed on an index with no real cube behind
+  // it: it silently never flashed during Observe (cubes[idx] was undefined) and
+  // could never be tapped during Execute either, so the round could only ever
+  // complete by pure luck — otherwise it hung forever waiting for a tap on a
+  // tile that was never on the board.
+  const totalCubes  = state.gridSize * state.gridSize;
   const pattern: number[] = [];
   while (pattern.length < patternSize) {
     const idx = Math.floor(Math.random() * totalCubes);

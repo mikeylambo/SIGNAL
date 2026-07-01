@@ -66,6 +66,63 @@ test('skip button on onboarding lands on main menu and persists the flag', async
   expect(completed).toBe(true);
 });
 
+test('tutorial pattern only ever references real board tiles', async ({ page }) => {
+  // Regression test for a bug where the tutorial generated pattern indices
+  // using gridSize³ (treating the board as a full 3D cube) instead of gridSize²
+  // (the board is actually a flat grid — see createBoard()'s x/z loop). That
+  // meant most pattern indices pointed at cubes that didn't exist: they never
+  // flashed during Observe and could never be tapped during Execute, so the
+  // round could only complete by pure luck and otherwise hung forever.
+  await page.goto('/');
+  await clickHowToPlay(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: ONBOARDING_TIMEOUT_MS });
+
+  type SignalHandle = { getState: () => { pattern: number[]; gridSize: number } };
+  const { pattern, gridSize } = await page.evaluate(() => {
+    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
+    return sig ? sig.getState() : { pattern: [], gridSize: 0 };
+  });
+
+  expect(pattern.length).toBeGreaterThan(0);
+  for (const idx of pattern) {
+    expect(idx).toBeLessThan(gridSize * gridSize);
+  }
+});
+
+test('tapping every pattern tile in the tutorial completes the round', async ({ page }) => {
+  await page.goto('/');
+  await clickHowToPlay(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: ONBOARDING_TIMEOUT_MS });
+
+  type SignalHandle = {
+    getState: () => { pattern: number[] };
+    getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
+  };
+  const { pattern, positions } = await page.evaluate(() => {
+    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
+    if (!sig) return { pattern: [], positions: [] };
+    const pattern = sig.getState().pattern;
+    return { pattern, positions: pattern.map(idx => sig.getCubeScreenPos(idx)) };
+  });
+
+  expect(pattern.length).toBeGreaterThan(0);
+  for (const pos of positions) {
+    expect(pos).not.toBeNull();
+    if (pos) {
+      await page.mouse.click(pos.x, pos.y);
+      await page.waitForTimeout(150);
+    }
+  }
+
+  // Round should complete and advance to Step 5 (timer explanation) then
+  // Step 6's final card — not hang waiting for a tap on a tile that isn't there.
+  await expect(page.locator('#ob-next-6')).toBeVisible({ timeout: 15000 });
+  await page.locator('#ob-next-6').click();
+
+  // Lands on results screen with the onboarding-specific CTA
+  await expect(page.locator('#enter-signal-btn')).toBeVisible({ timeout: 8000 });
+});
+
 test('completing the onboarding round shows "Enter SIGNAL →" and landing on menu sets the flag', async ({ page }) => {
   await page.goto('/');
 
