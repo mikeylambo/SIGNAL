@@ -1,20 +1,17 @@
 import { state } from '../state';
 import { profile, saveProfile } from '../save';
-import { initGame, showResultsScreen, registerShowResultsScreen, stopTimer, runTimer } from '../game/runLoop';
+import { initGame, showResultsScreen, registerShowResultsScreen, stopTimer, runTimer, registerReturnToMenu } from '../game/runLoop';
 import { createBoard } from '../render/board';
 import { updateComboUI, showMessage, renderStatsBar } from './hud';
 import { resetAnimTime, loopState } from '../render/loop';
 import { isReducedMotion, toggleReducedMotion } from '../reducedMotion';
 import { updateMenuText } from './menu';
 import { stopGameplayAudio } from '../audioUnlocks';
-import { registerOnboardingSkipHandler } from './onboarding';
-
-// Break the runLoop→onboarding→modals cycle: register returnToMenu as the
-// Skip handler at module load time (same pattern as registerShowResultsScreen).
-registerOnboardingSkipHandler(() => returnToMenu());
 
 // Register with runLoop so gameOver can call back without circular dep
 registerShowResultsScreen(showResultsScreen);
+// Register returnToMenu so startOnboardingRound() can navigate back after tutorial
+registerReturnToMenu(returnToMenu);
 
 export function returnToMenu(): void {
   (document.getElementById('results-screen') as HTMLElement).style.display = 'none';

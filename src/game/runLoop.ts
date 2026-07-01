@@ -6,7 +6,6 @@ import { camera, spawnParticles } from '../render/scene';
 import { loopState, cameraShake, flashScreen, resetPivotRotation } from '../render/loop';
 import { playTone, haptic, initAudio } from '../audio';
 import { startGameplayAudio, stopGameplayAudio, spatialPan } from '../audioUnlocks';
-import { showOnboardingHint, fadeOnboardingHint } from '../ui/onboarding';
 import { addSignal, recordRun, t, profile, saveProfile } from '../save';
 import { recordActivity, recordDailyCompletion } from '../streaks';
 import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI, updateStatsUI, renderStatsBar } from '../ui/hud';
@@ -22,6 +21,11 @@ const hitstopScale = isTouchDevice ? 0.35 : 1;
 let _showResultsScreen: (() => void) | null = null;
 export function registerShowResultsScreen(fn: () => void): void {
   _showResultsScreen = fn;
+}
+
+let _returnToMenu: (() => void) | null = null;
+export function registerReturnToMenu(fn: () => void): void {
+  _returnToMenu = fn;
 }
 
 // Onboarding hooks — set by onboarding.ts for the single guided tutorial round,
@@ -88,23 +92,24 @@ export function stopTimer(): void {
 
 export async function startOnboardingRound(): Promise<void> {
   if (profile.hasSeenOnboarding) return;
+
+  initAudio();
+
   const spatialIdx = PROTOCOLS.findIndex(p => p.id === 'spatial');
   const classicIdx = PACINGS.findIndex(p => p.id === 'classic');
   if (spatialIdx >= 0) state.curProtIdx = spatialIdx;
   if (classicIdx >= 0) state.curPaceIdx = classicIdx;
   state.isOnboarding = true;
-  state.isDailyRun = false;
+  state.isDailyRun   = false;
 
-  const uiLayer        = document.getElementById('ui-layer')!;
-  const resultsScreen  = document.getElementById('results-screen')!;
-  const gameplayHud    = document.getElementById('gameplay-hud') as HTMLElement;
+  const uiLayer            = document.getElementById('ui-layer')!;
+  const gameplayHud        = document.getElementById('gameplay-hud') as HTMLElement;
   const stressBarContainer = document.getElementById('stress-bar-container')!;
-  const stressBar      = document.getElementById('stress-bar')!;
+  const stressBar          = document.getElementById('stress-bar')!;
 
-  resultsScreen.style.display = 'none';
-  uiLayer.style.display       = 'flex';
-  uiLayer.style.opacity       = '1';
-
+  (document.getElementById('results-screen') as HTMLElement).style.display = 'none';
+  uiLayer.style.display = 'flex';
+  uiLayer.style.opacity = '1';
   (document.getElementById('menu-sheet')    as HTMLElement).style.display = 'none';
   (document.getElementById('controls-hint') as HTMLElement).style.display = 'none';
   (document.getElementById('menu-topbar')   as HTMLElement).style.display = 'none';
@@ -115,23 +120,264 @@ export async function startOnboardingRound(): Promise<void> {
   state.mistakes = 0; state.clears = 0; state.earnedFragments = 0;
   state.combo = 0; state.maxCombo = 0;
   state.gridSize = 3; state.activeCount = 3; state.nBackActive = false;
+  state.userClicks  = [];
+  state.isPlayable  = false;
   loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
 
   updateComboUI();
   renderStatsBar();
+  stressBarContainer.style.display = 'none';
 
+  createBoard();
+  startGameplayAudio();
+
+  // ── Shared state ──────────────────────────────────────────────────────────
+  let done = false;
+  let _stepResolve: (() => void) | null = null;
+
+  const showCard = (html: string): HTMLElement => {
+    document.getElementById('ob-card')?.remove();
+    const card = document.createElement('div');
+    card.id = 'ob-card';
+    card.style.cssText = [
+      'position:fixed;inset:0;z-index:200;',
+      'display:flex;align-items:center;justify-content:center;',
+      'background:rgba(5,8,13,0.85);backdrop-filter:blur(8px);',
+    ].join('');
+    card.innerHTML = html;
+    document.body.appendChild(card);
+    return card;
+  };
+  const removeCard = () => document.getElementById('ob-card')?.remove();
+
+  const showCallout = (msg: string): void => {
+    document.getElementById('ob-callout')?.remove();
+    const el = document.createElement('div');
+    el.id = 'ob-callout';
+    el.style.cssText = [
+      'position:fixed;bottom:320px;left:0;right:0;z-index:150;',
+      'display:flex;justify-content:center;pointer-events:none;',
+    ].join('');
+    el.innerHTML =
+      '<div style="background:rgba(5,8,13,0.88);border:1px solid rgba(255,255,255,0.1);' +
+      'border-radius:4px;padding:10px 18px;font-family:var(--font-mono);font-size:0.75rem;' +
+      'color:var(--text-muted);letter-spacing:0.5px;text-align:center;max-width:280px;">' +
+      msg + '</div>';
+    document.body.appendChild(el);
+  };
+  const removeCallout = () => document.getElementById('ob-callout')?.remove();
+
+  const skipBtn = document.createElement('button');
+  skipBtn.id = 'ob-skip-btn';
+  skipBtn.textContent = 'Skip tutorial';
+  skipBtn.style.cssText = [
+    'position:fixed;top:24px;right:18px;z-index:300;',
+    'padding:8px 16px;font-family:var(--font-mono);font-size:0.68rem;',
+    'letter-spacing:1.5px;background:none;',
+    'border:1px solid rgba(255,255,255,0.2);',
+    'color:rgba(255,255,255,0.4);border-radius:2px;cursor:pointer;',
+  ].join('');
+  document.body.appendChild(skipBtn);
+
+  const finish = (completed: boolean): void => {
+    if (done) return;
+    done = true;
+    removeCard();
+    removeCallout();
+    skipBtn.remove();
+    clearOnboardingHooks();
+    state.isPlayable   = false;
+    state.isOnboarding = false;
+    profile.hasSeenOnboarding      = true;
+    profile.hasCompletedOnboarding = completed;
+    saveProfile();
+    stopGameplayAudio();
+    _stepResolve?.();
+    _returnToMenu?.();
+  };
+
+  skipBtn.addEventListener('click', () => finish(false));
+
+  // ── Step 1 — Intro card ───────────────────────────────────────────────────
+  await new Promise<void>(resolve => {
+    _stepResolve = resolve;
+    const card = showCard(
+      '<div style="background:rgba(5,8,13,0.95);border:1px solid rgba(255,255,255,0.1);' +
+      'border-radius:6px;padding:36px 44px;text-align:center;max-width:300px;">' +
+      '<div style="font-family:var(--font-display);font-size:1.5rem;font-weight:800;' +
+      'letter-spacing:4px;color:var(--active);margin-bottom:12px;">SIGNAL</div>' +
+      '<div style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-muted);' +
+      'line-height:1.7;letter-spacing:0.5px;margin-bottom:24px;">' +
+      'A memory training game.<br>Watch the pattern. Reproduce it.</div>' +
+      '<button id="ob-next-1" style="background:var(--active);color:#001016;border:none;' +
+      'border-radius:3px;padding:12px 28px;font-family:var(--font-display);' +
+      "font-size:0.85rem;font-weight:800;letter-spacing:2px;cursor:pointer;\">Let's go \u2192</button></div>",
+    );
+    card.querySelector('#ob-next-1')!.addEventListener('click', () => {
+      _stepResolve = null; removeCard(); resolve();
+    });
+  });
+  if (done) return;
+
+  // ── Step 2 — Matrix introduction ──────────────────────────────────────────
+  showCard(
+    '<div style="background:rgba(5,8,13,0.9);border:1px solid rgba(255,255,255,0.08);' +
+    'border-radius:6px;padding:24px 32px;text-align:center;max-width:260px;">' +
+    '<div style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text);' +
+    'letter-spacing:0.5px;line-height:1.6;">' +
+    'This is your grid.<br>Tiles will flash \u2014 remember which ones.</div></div>',
+  );
+  await new Promise<void>(resolve => {
+    _stepResolve = resolve;
+    setTimeout(() => { _stepResolve = null; resolve(); }, 2500);
+  });
+  removeCard();
+  if (done) return;
+
+  // ── Step 3 — Controlled Observe flash ────────────────────────────────────
+  showCallout('Watch carefully.');
+  await delay(600);
+  if (done) return;
+
+  const patternSize = state.activeCount;
+  const totalCubes  = state.gridSize * state.gridSize * state.gridSize;
+  const pattern: number[] = [];
+  while (pattern.length < patternSize) {
+    const idx = Math.floor(Math.random() * totalCubes);
+    if (!pattern.includes(idx)) pattern.push(idx);
+  }
+  state.pattern = pattern;
+
+  for (const idx of pattern) {
+    if (done) break;
+    const cube = cubes[idx];
+    if (cube) {
+      setCubeState(cube, 'active');
+      playTone('active', spatialPan(idx));
+      await delay(600);
+      setCubeState(cube, 'base');
+      if (done) break;
+      await delay(400);
+    }
+  }
+  removeCallout();
+  if (done) return;
+
+  // ── Step 4 — Live Execute (no timer) ─────────────────────────────────────
+  let retryCount = 0;
+  const MAX_RETRIES = 2;
+
+  await new Promise<void>(resolve => {
+    _stepResolve = resolve;
+    if (done) { resolve(); return; }
+
+    showCallout('Now tap them back.<br>First tile dismisses this message.');
+    state.userClicks = [];
+    state.isPlayable = true;
+
+    const canvas = document.getElementById('canvas-container');
+    const onFirstTap = () => removeCallout();
+    canvas?.addEventListener('pointerdown', onFirstTap, { once: true });
+
+    const retry = async () => {
+      retryCount++;
+      state.isPlayable = false;
+      canvas?.removeEventListener('pointerdown', onFirstTap);
+      if (done) { resolve(); return; }
+
+      if (retryCount >= MAX_RETRIES) {
+        showCallout("No problem \u2014 you'll get it in a real run.");
+        for (const idx of pattern) { const cube = cubes[idx]; if (cube) setCubeState(cube, 'correct'); }
+        await delay(2500);
+        if (done) { resolve(); return; }
+        for (const idx of pattern) { const cube = cubes[idx]; if (cube) setCubeState(cube, 'base'); }
+        clearOnboardingHooks();
+        removeCallout();
+        _stepResolve = null;
+        resolve();
+        return;
+      }
+
+      removeCallout();
+      showCallout("That tile wasn't in the pattern.<br>In a real run this ends your streak \u2014 try again.");
+      await delay(1800);
+      if (done) { resolve(); return; }
+      removeCallout();
+      showCallout('Watch again\u2026');
+
+      for (const idx of pattern) {
+        if (done) break;
+        const cube = cubes[idx];
+        if (cube) {
+          setCubeState(cube, 'active');
+          playTone('active', spatialPan(idx));
+          await delay(600);
+          setCubeState(cube, 'base');
+          if (done) break;
+          await delay(400);
+        }
+      }
+      if (done) { resolve(); return; }
+      removeCallout();
+      showCallout('Now try again.');
+      state.userClicks = [];
+      state.isPlayable = true;
+      canvas?.addEventListener('pointerdown', onFirstTap, { once: true });
+    };
+
+    setOnboardingHooks({
+      onMistake: () => { void retry(); },
+      onRoundEnd: () => {
+        clearOnboardingHooks();
+        canvas?.removeEventListener('pointerdown', onFirstTap);
+        removeCallout();
+        _stepResolve = null;
+        resolve();
+      },
+    });
+  });
+  if (done) return;
+  state.isPlayable = false;
+
+  // ── Step 5 — Timer explanation ────────────────────────────────────────────
   stressBarContainer.style.display = 'block';
   stressBar.style.width = '100%';
   stressBar.style.backgroundColor = 'var(--active)';
+  showCallout('In Classic mode, this is your lifeline.<br>Keep your streak alive before it runs out.');
 
-  showOnboardingHint();
+  const DRAIN_STEPS = 60;
+  for (let i = DRAIN_STEPS; i >= 0; i--) {
+    if (done) break;
+    stressBar.style.width = `${(i / DRAIN_STEPS) * 100}%`;
+    await delay(Math.round(3000 / DRAIN_STEPS));
+  }
+  stressBarContainer.style.display = 'none';
+  removeCallout();
+  if (done) return;
 
-  startGameplayAudio();
+  // ── Step 6 — Final card ───────────────────────────────────────────────────
+  await new Promise<void>(resolve => {
+    _stepResolve = resolve;
+    const card = showCard(
+      '<div style="background:rgba(5,8,13,0.95);border:1px solid rgba(255,255,255,0.1);' +
+      'border-radius:6px;padding:36px 44px;text-align:center;max-width:300px;">' +
+      '<div style="font-family:var(--font-display);font-size:1.1rem;font-weight:800;' +
+      "letter-spacing:3px;color:var(--correct);margin-bottom:12px;\">You're ready.</div>" +
+      '<div style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-muted);' +
+      'line-height:1.7;letter-spacing:0.5px;margin-bottom:24px;">' +
+      'Five protocols. Three pacing modes.<br>One leaderboard. Go find your ceiling.</div>' +
+      '<button id="ob-next-6" style="background:var(--active);color:#001016;border:none;' +
+      'border-radius:3px;padding:12px 28px;font-family:var(--font-display);' +
+      'font-size:0.85rem;font-weight:800;letter-spacing:2px;cursor:pointer;">' +
+      'Start Training \u2192</button></div>',
+    );
+    card.querySelector('#ob-next-6')!.addEventListener('click', () => {
+      _stepResolve = null; removeCard(); resolve();
+    });
+  });
+  if (done) return;
 
-  createBoard();
-  await delay(200);
-  await runCountdown();
-  startLevel();
+  finish(true);
 }
 
 
@@ -243,7 +489,6 @@ export async function startLevel(): Promise<void> {
 
   showMessage('Observe', 'var(--active)');
   _ob.onObserve?.();
-  if (state.isOnboarding) fadeOnboardingHint();
   await delay(300);
   const speedMult = pPace.id === 'sprint' ? 0.6 : 1;
 
