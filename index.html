@@ -289,13 +289,17 @@
             <span class="combo-num">0</span><span class="combo-label">COMBO</span>
         </div>
 
-        <!-- Floating hint — sits just above the sheet, hidden during gameplay -->
+        <!-- Floating hint — sits just above the sheet, hidden during gameplay.
+             Font size scales with viewport width and text is allowed to wrap to a
+             second line rather than truncate, so it degrades gracefully on any
+             screen instead of only being tuned for the widths we happened to test. -->
         <div id="controls-hint" style="
             position:absolute; bottom:calc(var(--menu-sheet-h, 300px) + 8px); left:0; right:0;
             text-align:center; pointer-events:none;
-            font-family:var(--font-mono); font-size:0.72rem;
-            color:var(--text-muted); letter-spacing:1px;
-            padding:0 1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            font-family:var(--font-mono); font-size:clamp(0.6rem, 2.6vw, 0.72rem);
+            color:var(--text-muted); letter-spacing:1px; line-height:1.4;
+            padding:0 calc(1rem + var(--sar, 0px)) 0 calc(1rem + var(--sal, 0px));
+            white-space:normal; overflow-wrap:break-word;">
             Drag to rotate · Tap to select · Pinch to zoom
         </div>
 
