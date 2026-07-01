@@ -8,7 +8,7 @@ export const loopState = {
   isDragging: false,
   dragThreshold: false,
   prevMouse: { x: 0, y: 0 },
-  targetRot: { x: 0, y: 0 },
+  targetRot: { x: Math.PI / 6, y: -Math.PI / 8 },
   mouseX: 0,
   mouseY: 0,
   hitstopEndTime: 0,
