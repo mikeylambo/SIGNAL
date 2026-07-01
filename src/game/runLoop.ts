@@ -833,6 +833,13 @@ export function gameOver(reasonText: string): void {
     const mobileFovAdjustment = aspect < 1 ? (1 / aspect) * 0.8 : 1;
     const dist = Math.max(12, state.gridSize * 2.5) * mobileFovAdjustment;
     camera.position.set(0, dist * 0.6, dist);
+    // This pulls the camera back for a "survey the whole board" shot before the
+    // results screen covers it, so it deliberately doesn't reuse
+    // adjustCameraForViewport()'s framing — but it still has to aim at the grid
+    // after moving. Without this the camera's rotation stayed wherever it was
+    // before the jump, so the grid would visibly swing out of frame for the gap
+    // before results screen appeared.
+    camera.lookAt(0, 0, 0);
     setTimeout(() => { if (_showResultsScreen) _showResultsScreen(); }, 500);
   });
 }
