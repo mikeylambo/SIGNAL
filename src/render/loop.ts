@@ -8,7 +8,7 @@ export const loopState = {
   isDragging: false,
   dragThreshold: false,
   prevMouse: { x: 0, y: 0 },
-  targetRot: { x: 0, y: 0 },  // only the drag handler updates this
+  targetRot: { x: 0, y: 0 },
   mouseX: 0,
   mouseY: 0,
   hitstopEndTime: 0,
@@ -25,7 +25,6 @@ export function resetAnimTime(): void {
 }
 
 export function resetPivotRotation(): void {
-  // Sync targetRot to current pivot angle — no snap on game start
   loopState.targetRot.x = pivotGroup.rotation.x;
   loopState.targetRot.y = pivotGroup.rotation.y;
 }
@@ -58,7 +57,6 @@ export function animate(timestamp: number): void {
   dt60 = Math.min(dt60, 4);
 
   const pPace = PACINGS[state.curPaceIdx];
-
   const reducedMotion = isReducedMotion();
 
   if (gridFloor && !reducedMotion) {
@@ -66,14 +64,9 @@ export function animate(timestamp: number): void {
     if (gridFloor.position.z > 1) gridFloor.position.z = 0;
   }
 
-  // Grid stays wherever the player left it — targetRot only changes on drag.
   const rotLerp = 1 - Math.pow(1 - 0.1, dt60);
   pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
   pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
- else if (!isMenuIdle) {
-    pivotGroup.rotation.x += (loopState.targetRot.x - pivotGroup.rotation.x) * rotLerp;
-    pivotGroup.rotation.y += (loopState.targetRot.y - pivotGroup.rotation.y) * rotLerp;
-  }
 
   if (!loopState.isDragging && !reducedMotion) {
     const driftLerp = 1 - Math.pow(1 - 0.05, dt60);
@@ -117,21 +110,15 @@ export function flashScreen(color: string): void {
   el.classList.add('flash-active');
 }
 
-// Cancellation token: each cameraShake call increments this. A tick closure
-// captures the token at the moment it's created; if a newer shake starts
-// before the old one finishes, the old tick sees a stale token and exits,
-// preventing two concurrent loops from fighting over camera.position.
 let shakeGeneration = 0;
 
 export function cameraShake(intensity: number, durationMs: number, onComplete?: () => void): void {
   if (isReducedMotion()) { if (onComplete) onComplete(); return; }
-
   const restX = camera.position.x;
   const restY = camera.position.y;
   const restZ = camera.position.z;
   const start = performance.now();
   const generation = ++shakeGeneration;
-
   function tick(now: number) {
     if (generation !== shakeGeneration) { camera.position.set(restX, restY, restZ); return; }
     const elapsed = now - start;
