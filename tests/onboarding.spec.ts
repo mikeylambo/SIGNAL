@@ -11,7 +11,7 @@ async function clickHowToPlay(page: Page) {
   await page.click('#how-to-play-btn', { timeout: SPLASH_TIMEOUT_MS });
 }
 
-test('How to Play triggers onboarding — menu sheet is hidden, countdown appears', async ({ page }) => {
+test('How to Play triggers onboarding — menu sheet is hidden, intro card appears', async ({ page }) => {
   await page.goto('/');
 
   // Trigger tutorial via opt-in button (waits for splash to clear)
@@ -20,24 +20,39 @@ test('How to Play triggers onboarding — menu sheet is hidden, countdown appear
   // Menu sheet must be hidden — onboarding round replaced it
   await expect(page.locator('#menu-sheet')).toBeHidden();
 
-  // Countdown overlay appears
-  await expect(page.locator('#countdown-overlay')).toBeVisible();
+  // Onboarding intro card and skip button must be present
+  await expect(page.locator('#ob-card')).toBeVisible();
+  await expect(page.locator('#ob-skip-btn')).toBeVisible();
 
-  // Onboarding hint overlay must be present
-  await expect(page.locator('#onboarding-hint')).toBeVisible();
+  // Advance past the intro card — countdown should not appear until Step 3
+  await page.locator('#ob-next-1').click();
 });
 
-test('skip button on onboarding hint lands on main menu and persists the flag', async ({ page }) => {
+test('double-tapping How to Play does not start two concurrent onboarding runs', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('#how-to-play-btn', { state: 'visible', timeout: SPLASH_TIMEOUT_MS });
+
+  // Fire two rapid clicks — the button disables itself on first click, so the
+  // second should be a no-op rather than starting a second concurrent run.
+  await page.click('#how-to-play-btn');
+  await page.click('#how-to-play-btn', { force: true, timeout: 500 }).catch(() => {});
+
+  // Exactly one skip button and one card should exist, not duplicates.
+  await expect(page.locator('#ob-skip-btn')).toHaveCount(1);
+  await expect(page.locator('#ob-card')).toHaveCount(1);
+});
+
+test('skip button on onboarding lands on main menu and persists the flag', async ({ page }) => {
   await page.goto('/');
 
   // Trigger onboarding via How to Play
   await clickHowToPlay(page);
 
-  // Wait for the hint overlay to render
-  await expect(page.locator('#onboarding-hint')).toBeVisible({ timeout: 3000 });
+  // Wait for the skip button to render
+  await expect(page.locator('#ob-skip-btn')).toBeVisible({ timeout: 3000 });
 
   // Click Skip
-  await page.locator('#onboarding-hint button').click();
+  await page.locator('#ob-skip-btn').click();
 
   // Menu sheet must reappear and start button must be visible
   await expect(page.locator('#start-btn')).toBeVisible({ timeout: 2000 });

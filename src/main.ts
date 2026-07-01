@@ -117,11 +117,13 @@ window.addEventListener('load', () => {
   });
 
   document.getElementById('replay-intro-btn')!.addEventListener('click', () => {
+    const btn = document.getElementById('replay-intro-btn') as HTMLButtonElement;
+    btn.disabled = true;
     profile.hasCompletedOnboarding = false;
     profile.hasSeenOnboarding = false;
     saveProfile();
     returnToMenu();
-    void startOnboardingRound();
+    void startOnboardingRound().finally(() => { btn.disabled = false; });
   });
 
   // Input listeners

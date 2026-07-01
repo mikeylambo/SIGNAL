@@ -7,6 +7,7 @@ import { resetAnimTime, loopState } from '../render/loop';
 import { isReducedMotion, toggleReducedMotion } from '../reducedMotion';
 import { updateMenuText } from './menu';
 import { stopGameplayAudio } from '../audioUnlocks';
+import { adjustCameraForViewport } from '../render/scene';
 
 // Register with runLoop so gameOver can call back without circular dep
 registerShowResultsScreen(showResultsScreen);
@@ -30,6 +31,10 @@ export function returnToMenu(): void {
 
   (document.getElementById('canvas-container') as HTMLElement).style.filter = 'none';
 
+  // Sheet is visible again with its real height — recompute the camera offset so
+  // the grid re-centers above it instead of keeping gameplay's centered framing.
+  adjustCameraForViewport();
+
   // Clear gameplay message and combo
   showMessage('', 'var(--text)');
   updateComboUI();
@@ -43,6 +48,7 @@ export function returnToMenu(): void {
   // Stop any active gameplay audio layers
   stopGameplayAudio();
 }
+
 
 export function setupModalListeners(): void {
   // "Enter SIGNAL →" shown on results screen when coming from an onboarding round
