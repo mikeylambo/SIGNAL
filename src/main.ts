@@ -1,4 +1,4 @@
-import { initScene, scene, pLight, gridFloor, camera, renderer } from './render/scene';
+import { initScene, adjustCameraForViewport, scene, pLight, gridFloor, camera, renderer } from './render/scene';
 import { startRenderLoop, stopRenderLoop, isLoopRunning } from './render/loop';
 import { state } from './state';
 import { applyTheme, currentThemeKey, t, setThemeChangeCallback, profile, saveProfile } from './save';
