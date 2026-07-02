@@ -285,6 +285,51 @@ test('profile modal shows lifetime stats and closes', async ({ page }) => {
   await expect(page.locator('#start-btn')).toBeVisible();
 });
 
+test('grid stays centered across repeated menu <-> gameplay transitions', async ({ page }) => {
+  // Regression test for a bug where the camera's vertical offset was computed
+  // from the menu-sheet's height but only recalculated on window resize —
+  // never at the actual menu-sheet show/hide transitions. That meant the grid's
+  // on-screen position depended on incidental resize timing rather than which
+  // screen was showing, so it would sometimes appear correctly centered during
+  // gameplay and sometimes still offset for the (now-hidden) menu sheet.
+  await page.goto('/');
+
+  type SignalHandle = {
+    getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
+  };
+  const getCenterCubeY = async (): Promise<number | null> => {
+    const pos = await page.evaluate(() => {
+      const sig = (window as Window & { __signal?: SignalHandle }).__signal;
+      return sig ? sig.getCubeScreenPos(4) : null; // center tile of the 3x3 grid
+    });
+    return pos ? pos.y : null;
+  };
+
+  // First gameplay entry
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+  const firstY = await getCenterCubeY();
+  expect(firstY).not.toBeNull();
+
+  // Back to menu
+  await page.locator('#pause-btn').click();
+  await page.locator('#pause-menu-btn').click();
+  await expect(page.locator('#start-btn')).toBeVisible();
+
+  // Fire an extra resize while the MENU is showing — this is what used to
+  // desync the offset from whichever screen actually ends up visible.
+  await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+  await page.waitForTimeout(100);
+
+  // Second gameplay entry — grid must land in the same place as the first time.
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+  const secondY = await getCenterCubeY();
+  expect(secondY).not.toBeNull();
+
+  expect(Math.abs((secondY as number) - (firstY as number))).toBeLessThan(5);
+});
+
 test('daily calibration button is present and functional', async ({ page }) => {
   await page.goto('/');
   const dailyBtn = page.locator('#daily-row');

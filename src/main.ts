@@ -1,4 +1,4 @@
-import { initScene, scene, pLight, gridFloor, camera, renderer } from './render/scene';
+import { initScene, adjustCameraForViewport, scene, pLight, gridFloor, camera, renderer } from './render/scene';
 import { startRenderLoop, stopRenderLoop, isLoopRunning } from './render/loop';
 import { state } from './state';
 import { applyTheme, currentThemeKey, t, setThemeChangeCallback, profile, saveProfile } from './save';
@@ -44,14 +44,21 @@ window.addEventListener('load', () => {
       vp.content += ', viewport-fit=cover';
     }
     const _saDiv = document.createElement('div');
-    _saDiv.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px);height:0;visibility:hidden;pointer-events:none;';
+    _saDiv.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px);left:env(safe-area-inset-left,0px);right:env(safe-area-inset-right,0px);height:0;visibility:hidden;pointer-events:none;';
     document.body.appendChild(_saDiv);
     const _saStyle = getComputedStyle(_saDiv);
     const _sat = parseFloat(_saStyle.top) || 0;
     const _sab = parseFloat(_saStyle.bottom) || 0;
+    // Left/right insets matter in landscape, where the notch/Dynamic Island sits
+    // on one side of the screen instead of the top — without these, text pinned
+    // to the screen edge (like the controls hint) can render partly under it.
+    const _sal = parseFloat(_saStyle.left) || 0;
+    const _sar = parseFloat(_saStyle.right) || 0;
     _saDiv.remove();
     if (_sat > 0) document.documentElement.style.setProperty('--sat', `${_sat}px`);
     if (_sab > 0) document.documentElement.style.setProperty('--sab', `${_sab}px`);
+    if (_sal > 0) document.documentElement.style.setProperty('--sal', `${_sal}px`);
+    if (_sar > 0) document.documentElement.style.setProperty('--sar', `${_sar}px`);
   }
 
   const container = document.getElementById('canvas-container')!;
@@ -91,12 +98,32 @@ window.addEventListener('load', () => {
   setupMenuListeners();
   setupModalListeners();
 
+  // Measure menu sheet height → CSS var so controls-hint sits just above it.
+  function updateMenuSheetHeight(): void {
+    const sheet = document.getElementById('menu-sheet');
+    if (sheet) {
+      const h = sheet.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--menu-sheet-h', `${h + 12}px`);
+    }
+  }
+  const sheetEl = document.getElementById('menu-sheet');
+  if (sheetEl && typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(updateMenuSheetHeight).observe(sheetEl);
+  }
+  updateMenuSheetHeight();
+  window.addEventListener('resize', () => {
+    updateMenuSheetHeight();
+    adjustCameraForViewport();
+  });
+
   document.getElementById('replay-intro-btn')!.addEventListener('click', () => {
+    const btn = document.getElementById('replay-intro-btn') as HTMLButtonElement;
+    btn.disabled = true;
     profile.hasCompletedOnboarding = false;
     profile.hasSeenOnboarding = false;
     saveProfile();
     returnToMenu();
-    void startOnboardingRound();
+    void startOnboardingRound().finally(() => { btn.disabled = false; });
   });
 
   // Input listeners

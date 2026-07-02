@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { state } from '../state';
 import { PROTOCOLS, PACINGS } from './protocols';
 import { cubes, setCubeState, createBoard } from '../render/board';
-import { camera, spawnParticles } from '../render/scene';
+import { camera, spawnParticles, adjustCameraForViewport } from '../render/scene';
 import { loopState, cameraShake, flashScreen, resetPivotRotation } from '../render/loop';
 import { playTone, haptic, initAudio } from '../audio';
 import { startGameplayAudio, stopGameplayAudio, spatialPan } from '../audioUnlocks';
@@ -28,8 +28,8 @@ export function registerReturnToMenu(fn: () => void): void {
   _returnToMenu = fn;
 }
 
-// Onboarding hooks — set by onboarding.ts for the single guided tutorial round,
-// cleared immediately after firing so they never affect normal gameplay.
+// Onboarding hooks — set by startOnboardingRound() below for the single guided
+// tutorial round, cleared immediately after firing so they never affect normal gameplay.
 type ObHooks = {
   onObserve?: () => void;
   onExecute?: () => void;
@@ -43,25 +43,34 @@ export function setOnboardingHooks(h: ObHooks): void { _ob = h; }
 export function clearOnboardingHooks(): void { _ob = {}; }
 
 export async function runCountdown(): Promise<void> {
-  return new Promise(async resolve => {
-    const countdownEl = document.getElementById('countdown-overlay')!;
-    countdownEl.style.opacity = '1';
-    for (let i = 3; i > 0; i--) {
-      countdownEl.innerText = String(i);
-      countdownEl.style.transform = 'translate(-50%, -50%) scale(1.2)';
-      playTone('tick');
-      await delay(100);
-      countdownEl.style.transform = 'translate(-50%, -50%) scale(1)';
-      await delay(700);
+  // Waits for unpause before counting elapsed time — countdown freezes while paused
+  async function pauseAwareDelay(ms: number): Promise<void> {
+    while (state.isPaused) await delay(50);
+    const start = performance.now();
+    while (true) {
+      await delay(16);
+      if (!state.isPaused && performance.now() - start >= ms) break;
     }
-    countdownEl.innerText = 'GO';
-    countdownEl.style.color = 'var(--correct)';
-    playTone('go');
-    await delay(500);
-    countdownEl.style.opacity = '0';
-    countdownEl.style.color = 'var(--active)';
-    resolve();
-  });
+  }
+
+  const countdownEl = document.getElementById('countdown-overlay')!;
+  countdownEl.style.opacity = '1';
+  for (let i = 3; i > 0; i--) {
+    while (state.isPaused) await delay(50);
+    countdownEl.innerText = String(i);
+    countdownEl.style.transform = 'translate(-50%, -50%) scale(1.2)';
+    playTone('tick');
+    await pauseAwareDelay(100);
+    countdownEl.style.transform = 'translate(-50%, -50%) scale(1)';
+    await pauseAwareDelay(700);
+  }
+  while (state.isPaused) await delay(50);
+  countdownEl.innerText = 'GO';
+  countdownEl.style.color = 'var(--correct)';
+  playTone('go');
+  await pauseAwareDelay(500);
+  countdownEl.style.opacity = '0';
+  countdownEl.style.color = 'var(--active)';
 }
 
 export function runTimer(timestamp: number): void {
@@ -90,8 +99,19 @@ export function stopTimer(): void {
 // and sets state.isOnboarding so results screen shows the "Enter SIGNAL →" CTA.
 // initGame() is NOT modified.
 
+// Re-entrancy guard: profile.hasSeenOnboarding only flips to true once the whole
+// tutorial finishes, so without this a second tap on "How to Play" (easy to do on
+// mobile — createBoard() below does synchronous Three.js work with no loading
+// feedback) starts a second concurrent run. Both runs then share the same
+// module-level _stepResolve/done/_ob and the same DOM element IDs, which is what
+// produces "screen doesn't clear" / "button doesn't advance" / needing to relaunch
+// the app to get back to a clean state. Set synchronously, before any await, so
+// there's no gap for a second call to slip through.
+let _onboardingRunning = false;
+
 export async function startOnboardingRound(): Promise<void> {
-  if (profile.hasSeenOnboarding) return;
+  if (profile.hasSeenOnboarding || _onboardingRunning) return;
+  _onboardingRunning = true;
 
   initAudio();
 
@@ -114,6 +134,7 @@ export async function startOnboardingRound(): Promise<void> {
   (document.getElementById('controls-hint') as HTMLElement).style.display = 'none';
   (document.getElementById('menu-topbar')   as HTMLElement).style.display = 'none';
   gameplayHud.style.display = 'flex';
+  adjustCameraForViewport();
 
   resetPivotRotation();
   state.level = 1; state.score = 0; state.streak = 0; state.maxStreak = 0;
@@ -122,7 +143,6 @@ export async function startOnboardingRound(): Promise<void> {
   state.gridSize = 3; state.activeCount = 3; state.nBackActive = false;
   state.userClicks  = [];
   state.isPlayable  = false;
-  loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
 
   updateComboUI();
   renderStatsBar();
@@ -167,11 +187,20 @@ export async function startOnboardingRound(): Promise<void> {
   };
   const removeCallout = () => document.getElementById('ob-callout')?.remove();
 
+  document.getElementById('ob-skip-btn')?.remove();
   const skipBtn = document.createElement('button');
   skipBtn.id = 'ob-skip-btn';
   skipBtn.textContent = 'Skip tutorial';
+  // Measure the HUD's actual rendered height rather than guessing a fixed
+  // offset — a hardcoded top:24px happened to land inside the HUD's own
+  // vertical band (HUD height is ~52px + the safe-area inset), which is what
+  // caused "Lv 1 · Pts 10" to overlap the skip button's left edge.
+  const hudBottom = gameplayHud.getBoundingClientRect().bottom;
   skipBtn.style.cssText = [
-    'position:fixed;top:24px;right:18px;z-index:300;',
+    // width:auto is required here — the global `button` rule sets width:100%,
+    // and with position:fixed + only `right` set that stretches this into a
+    // full-viewport-width bar that overlaps whatever's under it.
+    `position:fixed;top:${hudBottom + 12}px;right:calc(18px + var(--sar, 0px));z-index:300;width:auto;`,
     'padding:8px 16px;font-family:var(--font-mono);font-size:0.68rem;',
     'letter-spacing:1.5px;background:none;',
     'border:1px solid rgba(255,255,255,0.2);',
@@ -182,6 +211,7 @@ export async function startOnboardingRound(): Promise<void> {
   const finish = (completed: boolean): void => {
     if (done) return;
     done = true;
+    _onboardingRunning = false;
     removeCard();
     removeCallout();
     skipBtn.remove();
@@ -240,7 +270,14 @@ export async function startOnboardingRound(): Promise<void> {
   if (done) return;
 
   const patternSize = state.activeCount;
-  const totalCubes  = state.gridSize * state.gridSize * state.gridSize;
+  // The board is a flat gridSize x gridSize grid (see createBoard()'s x/z loop) —
+  // gridSize² valid indices, not gridSize³. Using the cubed formula here meant
+  // roughly 2 out of 3 random picks landed on an index with no real cube behind
+  // it: it silently never flashed during Observe (cubes[idx] was undefined) and
+  // could never be tapped during Execute either, so the round could only ever
+  // complete by pure luck — otherwise it hung forever waiting for a tap on a
+  // tile that was never on the board.
+  const totalCubes  = state.gridSize * state.gridSize;
   const pattern: number[] = [];
   while (pattern.length < patternSize) {
     const idx = Math.floor(Math.random() * totalCubes);
@@ -278,6 +315,27 @@ export async function startOnboardingRound(): Promise<void> {
     const canvas = document.getElementById('canvas-container');
     const onFirstTap = () => removeCallout();
     canvas?.addEventListener('pointerdown', onFirstTap, { once: true });
+
+    // handleMistake() clears onboarding hooks (_ob) before calling onMistake, by
+    // design, so a real in-progress mistake can't accidentally re-trigger itself.
+    // That means retry() MUST re-register hooks every time it hands control back
+    // to the player — otherwise the next tap (whether it's another mistake or the
+    // completing correct tap) finds no onMistake/onRoundEnd hook, falls through
+    // into normal (non-tutorial) game-over/level-complete logic, and this Step 4
+    // promise — which only resolves via one of those two hooks — never resolves.
+    // That's the "tutorial just hangs, but I can still drag the camera" bug.
+    const registerHooks = (): void => {
+      setOnboardingHooks({
+        onMistake: () => { void retry(); },
+        onRoundEnd: () => {
+          clearOnboardingHooks();
+          canvas?.removeEventListener('pointerdown', onFirstTap);
+          removeCallout();
+          _stepResolve = null;
+          resolve();
+        },
+      });
+    };
 
     const retry = async () => {
       retryCount++;
@@ -323,18 +381,10 @@ export async function startOnboardingRound(): Promise<void> {
       state.userClicks = [];
       state.isPlayable = true;
       canvas?.addEventListener('pointerdown', onFirstTap, { once: true });
+      registerHooks();
     };
 
-    setOnboardingHooks({
-      onMistake: () => { void retry(); },
-      onRoundEnd: () => {
-        clearOnboardingHooks();
-        canvas?.removeEventListener('pointerdown', onFirstTap);
-        removeCallout();
-        _stepResolve = null;
-        resolve();
-      },
-    });
+    registerHooks();
   });
   if (done) return;
   state.isPlayable = false;
@@ -406,7 +456,15 @@ export async function initGame(): Promise<void> {
   // Fade menu sheet out over 200ms, then hide it
   const menuSheet = document.getElementById('menu-sheet') as HTMLElement;
   menuSheet.classList.add('menu-sheet-hiding');
-  setTimeout(() => { menuSheet.style.display = 'none'; menuSheet.classList.remove('menu-sheet-hiding'); }, 200);
+  setTimeout(() => {
+    menuSheet.style.display = 'none';
+    menuSheet.classList.remove('menu-sheet-hiding');
+    // Only now does menu-sheet.getBoundingClientRect() actually read 0 height —
+    // recompute so the grid re-centers for gameplay instead of keeping whatever
+    // offset was last calculated (which could be stale from the menu layout if
+    // no resize event happened to fire in between).
+    adjustCameraForViewport();
+  }, 200);
   (document.getElementById('controls-hint') as HTMLElement).style.display = 'none';
   (document.getElementById('menu-topbar')   as HTMLElement).style.display = 'none';
 
@@ -420,7 +478,6 @@ export async function initGame(): Promise<void> {
   updateComboUI();
 
   state.gridSize = 3; state.activeCount = 3; state.nBackActive = false;
-  loopState.targetRot = { x: Math.PI / 6, y: -Math.PI / 8 };
 
   renderStatsBar();
 
@@ -776,6 +833,13 @@ export function gameOver(reasonText: string): void {
     const mobileFovAdjustment = aspect < 1 ? (1 / aspect) * 0.8 : 1;
     const dist = Math.max(12, state.gridSize * 2.5) * mobileFovAdjustment;
     camera.position.set(0, dist * 0.6, dist);
+    // This pulls the camera back for a "survey the whole board" shot before the
+    // results screen covers it, so it deliberately doesn't reuse
+    // adjustCameraForViewport()'s framing — but it still has to aim at the grid
+    // after moving. Without this the camera's rotation stayed wherever it was
+    // before the jump, so the grid would visibly swing out of frame for the gap
+    // before results screen appeared.
+    camera.lookAt(0, 0, 0);
     setTimeout(() => { if (_showResultsScreen) _showResultsScreen(); }, 500);
   });
 }

@@ -486,11 +486,17 @@ export function setupMenuListeners(): void {
   const howToPlayBtn = document.getElementById('how-to-play-btn');
   if (howToPlayBtn) {
     howToPlayBtn.addEventListener('click', () => {
+      // Disable immediately — createBoard() inside startOnboardingRound() does
+      // synchronous Three.js work with no loading indicator, so without this a
+      // fast second tap can fire before any visual change appears.
+      (howToPlayBtn as HTMLButtonElement).disabled = true;
       initAudio();
       profile.hasCompletedOnboarding = false;
       profile.hasSeenOnboarding = false;
       saveProfile();
-      void startOnboardingRound();
+      void startOnboardingRound().finally(() => {
+        (howToPlayBtn as HTMLButtonElement).disabled = false;
+      });
     });
   }
 

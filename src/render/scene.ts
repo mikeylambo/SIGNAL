@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 import { t } from '../save';
+import { state } from '../state';
 
 // Bloom resolution scales with detected device tier so mid-tier mobile
 // doesn't spend 60% of its frame budget on a blur effect.
@@ -34,24 +35,40 @@ export let bloomEnabled = false;
 
 export const particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 
-// Pulls the camera back on small or portrait viewports so the board isn't clipped.
-// Called at init and on every resize.
+// Position camera so the grid sits in the upper portion of the viewport,
+// above the bottom sheet UI. On mobile we measure the sheet height and
+// use it to compute a lookAt offset that keeps the grid visually centred
+// in the space above the sheet on all screen sizes. Also scales distance
+// with the current grid size (createBoard() used to do this separately with
+// its own copy of this same formula — merged here so there's one place that
+// decides where the camera goes, instead of two that can disagree).
 export function adjustCameraForViewport(): void {
   const portrait = window.innerWidth < window.innerHeight;
   const small    = window.innerHeight < 667;
-  if (small) {
-    camera.fov = 68;
-    camera.position.set(0, 4, 18);
-    camera.lookAt(0, 1.5, 0);
-  } else if (portrait) {
-    camera.fov = 62;
-    camera.position.set(0, 3.5, 16);
-    camera.lookAt(0, 1, 0);
-  } else {
-    camera.fov = 45;
-    camera.position.set(0, 2, 12);
-    camera.lookAt(0, 0.5, 0);
-  }
+
+  // How much of the viewport (0–1) is occupied by the bottom sheet?
+  // Default to 45% if the element isn't mounted yet.
+  const sheetEl = document.getElementById('menu-sheet');
+  const sheetFrac = sheetEl
+    ? sheetEl.getBoundingClientRect().height / window.innerHeight
+    : 0.45;
+
+  // We want the grid centred in the available space above the sheet.
+  // lookAtY shifts the camera target downward so the grid projects into
+  // the upper region. More sheet → more shift.
+  const lookAtY = -(sheetFrac * 3.5);
+
+  const baseZ = small ? 18 : portrait ? 15 : 14;
+  const baseY = small ? 6 : portrait ? 5.5 : 5;
+  const fov   = small ? 72 : portrait ? 62 : 50;
+  // Pull back as the grid grows beyond the default 3x3 so larger boards
+  // (later levels) still fit on screen.
+  const gridScale = Math.max(1, state.gridSize / 3);
+
+  camera.fov = fov;
+  camera.position.set(0, baseY * gridScale, baseZ * gridScale);
+  camera.lookAt(0, lookAtY, 0);
+  camera.zoom = 1;
   camera.updateProjectionMatrix();
 }
 
@@ -60,7 +77,7 @@ export function initScene(container: HTMLElement): void {
   scene.fog = new THREE.FogExp2(t.bg, 0.04);
 
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, 8, 12);
+  camera.position.set(0, 5, 14);
 
   // WebGL availability check — throws a readable error instead of white-screening.
   const testCanvas = document.createElement('canvas');

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CubeState } from '../types';
-import { scene, boardGroup, camera, gridFloor } from './scene';
+import { scene, boardGroup, gridFloor, adjustCameraForViewport } from './scene';
 import { t } from '../save';
 import { state } from '../state';
 
@@ -91,19 +91,10 @@ export function createBoard(): void {
     }
   }
 
-  // Reposition camera to fit the grid
-  // gridFloor is needed to silence the unused-import warning; it's used in scene.ts
+  // Reposition camera to fit the (possibly resized) grid. Single shared
+  // implementation in scene.ts — see adjustCameraForViewport() for why this
+  // used to be duplicated here.
   void gridFloor;
   void scene;
-
-  const portrait  = window.innerWidth < window.innerHeight;
-  const small     = window.innerHeight < 667;
-  const lookY     = small ? 1.5 : portrait ? 1.0 : 0.5;
-  const baseZ     = small ? 18 : portrait ? 16 : 12;
-  const baseY     = small ? 4 : portrait ? 3.5 : 2;
-  const gridScale = Math.max(1, state.gridSize / 3);
-  camera.position.set(0, baseY * gridScale, baseZ * gridScale);
-  camera.lookAt(0, lookY * gridScale, 0);
-  camera.zoom = 1;
-  camera.updateProjectionMatrix();
+  adjustCameraForViewport();
 }

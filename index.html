@@ -33,15 +33,28 @@
             --font-body: 'Inter', 'Segoe UI', sans-serif;
         }
 
+        html {
+            height: 100%; overflow: hidden; overscroll-behavior: none;
+        }
+
         body {
-            margin: 0; overflow: hidden; background-color: var(--bg);
+            height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; background-color: var(--bg);
             font-family: var(--font-body);
             color: var(--text); user-select: none;
             -webkit-tap-highlight-color: transparent; touch-action: none;
             transition: background-color 0.5s ease;
         }
 
-        #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; transition: filter 0.3s ease; }
+        /* A stray fixed vh figure caused a real (if tiny) document scroll on
+           mobile Safari: 100vh is measured against the browser's LARGEST
+           viewport (chrome collapsed), so with the address bar/toolbar visible
+           the canvas-container was taller than the actually-visible area, and
+           html — not body — is the element that actually scrolls, so body's
+           overflow:hidden alone didn't stop it. That's what let Safari's chrome
+           react to scroll and float mid-content instead of staying docked.
+           position:fixed + inset:0 anchors this to the true visual viewport
+           regardless of any residual scroll, instead of depending on vh math. */
+        #canvas-container { position: fixed; inset: 0; z-index: 1; transition: filter 0.3s ease; }
 
         /* ── Gameplay HUD bar ─────────────────────────────────────────────────── */
         #gameplay-hud {
@@ -83,7 +96,7 @@
         #stress-bar { height: 100%; width: 100%; background-color: var(--active); transition: width 0.1s linear, background-color 0.3s; transform-origin: left; }
 
         #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
+            position: fixed; inset: 0; z-index: 10;
             pointer-events: none; display: flex; flex-direction: column;
             transition: opacity 0.3s;
         }
@@ -104,13 +117,13 @@
         .currency-display { color: var(--currency); text-shadow: 0 0 8px rgba(0, 229, 255, 0.5); display: flex; align-items: center; gap: 5px;}
 
         #countdown-overlay {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             font-size: 6rem; font-weight: 800; color: var(--active); text-shadow: 0 0 30px var(--active);
             z-index: 15; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none;
         }
 
         #screen-flash {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 18;
+            position: fixed; inset: 0; z-index: 18;
             pointer-events: none; opacity: 0;
         }
         #screen-flash.flash-active { animation: screenFlash 0.35s ease-out; }
@@ -176,7 +189,7 @@
         .icon-btn { padding: 10px; width: 45px; height: 45px; font-size: 1.2rem; background: rgba(0,0,0,0.6); display: none; border-radius: 50%; justify-content: center; align-items: center; }
 
         .modal-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-modal); backdrop-filter: blur(20px); z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; box-sizing: border-box; transition: background 0.5s;
+            position: fixed; inset: 0; background: var(--bg-modal); backdrop-filter: blur(20px); z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; box-sizing: border-box; transition: background 0.5s;
         }
 
         .modal-container {
@@ -237,7 +250,6 @@
             .header { padding: calc(1rem + var(--sat, 0px)) 1rem 0; }
             h1 { font-size: 1.6rem; }
             .stats { font-size: 0.9rem; padding: 0.6rem 1rem; gap: 1rem; width: 100%; }
-            .icon-btn { position: absolute; top: 1rem; right: 1rem; }
             .modal-container { padding: 1.5rem; }
         }
     </style>
@@ -289,13 +301,17 @@
             <span class="combo-num">0</span><span class="combo-label">COMBO</span>
         </div>
 
-        <!-- Floating hint — sits just above the sheet, hidden during gameplay -->
+        <!-- Floating hint — sits just above the sheet, hidden during gameplay.
+             Font size scales with viewport width and text is allowed to wrap to a
+             second line rather than truncate, so it degrades gracefully on any
+             screen instead of only being tuned for the widths we happened to test. -->
         <div id="controls-hint" style="
-            position:absolute; bottom:296px; left:0; right:0;
+            position:absolute; bottom:calc(var(--menu-sheet-h, 300px) + 8px); left:0; right:0;
             text-align:center; pointer-events:none;
-            font-family:var(--font-mono); font-size:0.72rem;
-            color:var(--text-muted); letter-spacing:1px;
-            padding:0 1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            font-family:var(--font-mono); font-size:clamp(0.6rem, 2.6vw, 0.72rem);
+            color:var(--text-muted); letter-spacing:1px; line-height:1.4;
+            padding:0 calc(1rem + var(--sar, 0px)) 0 calc(1rem + var(--sal, 0px));
+            white-space:normal; overflow-wrap:break-word;">
             Drag to rotate · Tap to select · Pinch to zoom
         </div>
 
