@@ -45,7 +45,70 @@ create policy "public read"
 grant select on leaderboard_scores to anon;
 grant select on leaderboard_scores to authenticated;
 
+-- ── Player identity ownership ────────────────────────────────────────────────
+-- player_id alone is not authentication — it's just a client-generated UUID.
+-- Before this table existed, anyone could call submit_score/update_display_name
+-- with someone else's player_id. This table pins each player_id to a secret
+-- the client also generates once and never displays, claimed on first write
+-- ("first writer wins") and checked on every write after that.
+create table if not exists player_identities (
+  player_id    uuid primary key,
+  owner_secret uuid not null,
+  created_at   timestamptz not null default now()
+);
+alter table player_identities enable row level security;
+-- Intentionally no policies for anon — this table is only ever touched via the
+-- SECURITY DEFINER functions below, never queried or written directly by clients.
+
+create or replace function verify_or_claim_owner(
+  p_player_id     uuid,
+  p_owner_secret  uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  existing_secret uuid;
+begin
+  if p_owner_secret is null then
+    raise exception 'owner_secret is required';
+  end if;
+
+  select owner_secret into existing_secret
+  from player_identities
+  where player_id = p_player_id;
+
+  if existing_secret is null then
+    -- First time this player_id has ever written: claim it for this secret.
+    -- ON CONFLICT DO NOTHING covers the race where two calls for a brand-new
+    -- player_id land at nearly the same time — whichever inserts first wins,
+    -- and the second falls through to the re-select + check below.
+    insert into player_identities (player_id, owner_secret)
+    values (p_player_id, p_owner_secret)
+    on conflict (player_id) do nothing;
+
+    select owner_secret into existing_secret
+    from player_identities
+    where player_id = p_player_id;
+  end if;
+
+  if existing_secret is distinct from p_owner_secret then
+    raise exception 'owner_secret does not match this player_id';
+  end if;
+end;
+$$;
+
 -- ── submit_score ──────────────────────────────────────────────────────────────
+-- IMPORTANT: submit_score and update_display_name are being given a new
+-- required parameter (p_owner_secret). `create or replace function` only
+-- replaces a function with an IDENTICAL parameter signature — adding a
+-- parameter creates a second, separate overload instead, silently leaving the
+-- old vulnerable version callable. These explicit drops close that gap.
+drop function if exists submit_score(text, uuid, text, int, int, text, text);
+drop function if exists update_display_name(uuid, text);
+
 -- SECURITY DEFINER: runs as the function owner (bypasses RLS) so it can
 -- insert/update without an anon INSERT policy on the table.
 --
@@ -54,6 +117,7 @@ grant select on leaderboard_scores to authenticated;
 create or replace function submit_score(
   p_board_key     text,
   p_player_id     uuid,
+  p_owner_secret  uuid,
   p_display_name  text,
   p_score         int,
   p_level_reached int    default null,
@@ -66,6 +130,8 @@ security definer
 set search_path = public
 as $$
 begin
+  perform verify_or_claim_owner(p_player_id, p_owner_secret);
+
   -- board_key: required, ≤64 chars, lowercase alphanumeric + _ : -
   if p_board_key is null or length(p_board_key) < 1 or length(p_board_key) > 64 then
     raise exception 'invalid board_key length (must be 1–64 characters)';
@@ -116,8 +182,9 @@ grant execute on function submit_score to authenticated;
 -- appeared on, independent of submit_score()'s "only if score improved" guard.
 -- SECURITY DEFINER: bypasses RLS the same way submit_score() does.
 create or replace function update_display_name(
-  p_player_id    uuid,
-  p_display_name text
+  p_player_id     uuid,
+  p_owner_secret  uuid,
+  p_display_name  text
 )
 returns void
 language plpgsql
@@ -125,6 +192,8 @@ security definer
 set search_path = public
 as $$
 begin
+  perform verify_or_claim_owner(p_player_id, p_owner_secret);
+
   if p_display_name is null or length(trim(p_display_name)) = 0 then
     raise exception 'display_name is required';
   end if;

@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -30,6 +30,7 @@ const SaveSystem = (() => {
       lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
       hasSeenOnboarding: false,
       player_id: crypto.randomUUID(),
+      owner_secret: crypto.randomUUID(),
       display_name: '',
       currentStreak: 0,
       longestStreak: 0,
@@ -112,6 +113,14 @@ const SaveSystem = (() => {
       };
       raw.activeCustomSlot = 'custom1';
       raw.schemaVersion = 10;
+    }
+    if (raw.schemaVersion < 11) {
+      // v10 → v11: per-device ownership secret, required by submit_score/update_display_name
+      // to prevent one player from overwriting another's leaderboard identity.
+      // Existing players get a fresh secret here; the server claims it on next write
+      // via verify_or_claim_owner() the same way it would for a brand-new player_id.
+      raw.owner_secret = crypto.randomUUID();
+      raw.schemaVersion = 11;
     }
     return raw;
   }

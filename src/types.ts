@@ -31,6 +31,7 @@ export interface SavedProfile {
   };
   hasSeenOnboarding: boolean;
   player_id: string;     // stable UUID generated once; used as leaderboard identity
+  owner_secret: string;  // private per-device secret; proves ownership of player_id server-side, never displayed
   display_name: string;  // player-chosen name shown on the leaderboard
   currentStreak: number;          // consecutive daily challenges completed
   longestStreak: number;          // all-time best daily-challenge streak

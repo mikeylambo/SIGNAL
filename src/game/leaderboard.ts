@@ -53,12 +53,13 @@ export function setDisplayName(name: string): void {
 async function renameEverywhere(displayName: string): Promise<void> {
   try {
     const supabase = getClient();
-    const { player_id } = profile;
-    if (!player_id) return;
+    const { player_id, owner_secret } = profile;
+    if (!player_id || !owner_secret) return;
     if (containsProfanity(displayName)) return;
 
     const { error } = await supabase.rpc('update_display_name', {
       p_player_id:    player_id,
+      p_owner_secret: owner_secret,
       p_display_name: displayName.trim().slice(0, 32),
     });
     if (error) throw error;
@@ -83,9 +84,10 @@ export async function submitScore(
 ): Promise<void> {
   try {
     const supabase = getClient();
-    const { player_id, display_name } = profile;
+    const { player_id, owner_secret, display_name } = profile;
 
     if (!player_id) throw new Error('player_id not initialised');
+    if (!owner_secret) throw new Error('owner_secret not initialised');
     if (!display_name || display_name.trim().length === 0) {
       throw new Error('display_name is empty — set one before submitting to the leaderboard');
     }
@@ -96,6 +98,7 @@ export async function submitScore(
     const { error } = await supabase.rpc('submit_score', {
       p_board_key:     boardKey,
       p_player_id:     player_id,
+      p_owner_secret:  owner_secret,
       p_display_name:  display_name.trim().slice(0, 32),
       p_score:         score,
       p_level_reached: levelReached,
