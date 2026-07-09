@@ -941,6 +941,8 @@ export async function showResultsScreen(): Promise<void> {
     ? dailyBoardKey(new Date().toISOString().split('T')[0])
     : modeBoardKey(pMode.id, pPace.id);
 
+  let isNewBest = false;
+
   if (!state.isOnboarding) {
     // a. Display name — prompt on first run only
     if (!profile.display_name) {
@@ -953,9 +955,13 @@ export async function showResultsScreen(): Promise<void> {
 
     // b. Submit score — submitScore swallows its own errors, so this never throws
     if (profile.display_name) {
-      await submitScore(boardKey, state.score, state.level, pMode.id, pPace.id);
+      isNewBest = await submitScore(boardKey, state.score, state.level, pMode.id, pPace.id);
     }
   }
+
+  // d. New personal best banner
+  const newBestEl = document.getElementById('new-best-line')!;
+  newBestEl.style.display = isNewBest ? 'block' : 'none';
 
   // c. Leaderboard panel — skeleton shows immediately inside showLeaderboardPanel
   await showLeaderboardPanel(boardKey);

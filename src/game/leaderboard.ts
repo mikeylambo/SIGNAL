@@ -73,7 +73,10 @@ async function renameEverywhere(displayName: string): Promise<void> {
 /**
  * Upserts a score for the current player on `boardKey`.
  * The server only updates the row when the new score beats the stored one.
- * Any network or validation failure is caught and logged — the game never crashes.
+ * Returns whether this run was a new personal best on this board — always
+ * `false` on any network or validation failure, never thrown; the game must
+ * never crash or block on a leaderboard write, so a failure just means "no
+ * new-best banner this time," not an error surfaced to the player.
  */
 export async function submitScore(
   boardKey: string,
@@ -81,7 +84,7 @@ export async function submitScore(
   levelReached: number,
   protocol?: string,
   pacing?: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const supabase = getClient();
     const { player_id, owner_secret, display_name } = profile;
@@ -95,7 +98,7 @@ export async function submitScore(
       throw new Error('display_name contains disallowed content');
     }
 
-    const { error } = await supabase.rpc('submit_score', {
+    const { data, error } = await supabase.rpc('submit_score', {
       p_board_key:     boardKey,
       p_player_id:     player_id,
       p_owner_secret:  owner_secret,
@@ -107,9 +110,11 @@ export async function submitScore(
     });
 
     if (error) throw error;
+    return data === true;
   } catch (err) {
     // Leaderboard failures must never surface to the player or crash the game.
     console.warn('[leaderboard] submitScore failed:', err);
+    return false;
   }
 }
 

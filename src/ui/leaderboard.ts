@@ -78,6 +78,7 @@ export async function renderBoardInto(
   mode: string,
   bodyEl: HTMLElement,
   titleEl?: HTMLElement | null,
+  limit = 10,
 ): Promise<void> {
   if (titleEl) titleEl.textContent = formatModeTitle(mode);
 
@@ -85,7 +86,7 @@ export async function renderBoardInto(
   bodyEl.innerHTML = buildSkeleton();
 
   try {
-    const scores = await fetchBoard(mode, 10);
+    const scores = await fetchBoard(mode, limit);
     renderRows(scores, bodyEl);
   } catch {
     bodyEl.innerHTML = '<div style="padding:12px;font-family:var(--font-mono);font-size:0.78rem;color:var(--text-muted);">Could not load leaderboard.</div>';
@@ -180,7 +181,7 @@ async function refreshBrowserBoard(): Promise<void> {
   refreshBrowserChips();
   const body    = document.getElementById('lb-browser-body')!;
   const titleEl = document.getElementById('lb-browser-title');
-  await renderBoardInto(currentBrowserMode(), body, titleEl);
+  await renderBoardInto(currentBrowserMode(), body, titleEl, 25);
 }
 
 function chipStyle(): string {

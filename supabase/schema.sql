@@ -109,6 +109,12 @@ $$;
 drop function if exists submit_score(text, uuid, text, int, int, text, text);
 drop function if exists update_display_name(uuid, text);
 
+-- submit_score's return type is also changing (void → boolean, so callers can
+-- tell whether a run was a new personal best). create-or-replace can't change
+-- a function's return type either, even with an otherwise-identical parameter
+-- list, so this signature needs an explicit drop too.
+drop function if exists submit_score(text, uuid, uuid, text, int, int, text, text);
+
 -- SECURITY DEFINER: runs as the function owner (bypasses RLS) so it can
 -- insert/update without an anon INSERT policy on the table.
 --
@@ -124,11 +130,13 @@ create or replace function submit_score(
   p_protocol      text   default null,
   p_pacing        text   default null
 )
-returns void
+returns boolean
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_row_count int;
 begin
   perform verify_or_claim_owner(p_player_id, p_owner_secret);
 
@@ -170,6 +178,13 @@ begin
     pacing        = excluded.pacing,
     created_at    = now()
   where excluded.score > leaderboard_scores.score;
+
+  -- ROW_COUNT reflects rows actually inserted/updated: a fresh insert (first
+  -- score ever on this board) or an update that passed the WHERE clause above.
+  -- A row skipped by the WHERE clause (existing score was already as high or
+  -- higher) does not count, giving us "was this a new personal best?" for free.
+  get diagnostics v_row_count = row_count;
+  return v_row_count > 0;
 end;
 $$;
 
