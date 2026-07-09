@@ -951,11 +951,9 @@ export async function showResultsScreen(): Promise<void> {
       }
     }
 
-    // b. Submit score — fire-and-forget; board loads regardless of outcome
+    // b. Submit score — submitScore swallows its own errors, so this never throws
     if (profile.display_name) {
-      submitScore(boardKey, state.score, state.level, pMode.id, pPace.id).catch(err => {
-        console.warn('[SIGNAL] leaderboard submit failed', err);
-      });
+      await submitScore(boardKey, state.score, state.level, pMode.id, pPace.id);
     }
   }
 
