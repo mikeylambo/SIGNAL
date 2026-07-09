@@ -31,10 +31,40 @@ function containsProfanity(name: string): boolean {
 
 // ── Display name helper ────────────────────────────────────────────────────────
 
-/** Sets the player's display name and persists it to the save file. */
+/**
+ * Sets the player's display name, persists it to the save file, and propagates
+ * it to every leaderboard row the player already appears on. Was previously
+ * defined but never called anywhere — it's now wired up from the Stats screen.
+ */
 export function setDisplayName(name: string): void {
   profile.display_name = name.trim().slice(0, 32);
   saveProfile();
+  void renameEverywhere(profile.display_name);
+}
+
+/**
+ * Propagates a display-name change to every board the player already appears
+ * on. This is separate from submitScore()'s upsert, which only touches
+ * display_name when the incoming score also beats the stored one — without
+ * this, a rename with no accompanying high score would never show up on
+ * boards the player has already posted to. Fire-and-forget from the caller's
+ * side: errors are logged, never thrown, matching submitScore()'s contract.
+ */
+async function renameEverywhere(displayName: string): Promise<void> {
+  try {
+    const supabase = getClient();
+    const { player_id } = profile;
+    if (!player_id) return;
+    if (containsProfanity(displayName)) return;
+
+    const { error } = await supabase.rpc('update_display_name', {
+      p_player_id:    player_id,
+      p_display_name: displayName.trim().slice(0, 32),
+    });
+    if (error) throw error;
+  } catch (err) {
+    console.warn('[leaderboard] renameEverywhere failed:', err);
+  }
 }
 
 // ── Submit score ───────────────────────────────────────────────────────────────

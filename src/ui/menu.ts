@@ -8,6 +8,8 @@ import { AUDIO_UNLOCKS, isAudioUnlocked, buyAudioUnlock, isAudioFeatureEnabled, 
 import { renderStatsBar } from './hud';
 import { returnToMenu, updateReducedMotionText } from './modals';
 import { initGame, stopTimer, startOnboardingRound } from '../game/runLoop';
+import { promptDisplayName } from './leaderboard';
+import { setDisplayName } from '../game/leaderboard';
 
 export function updateMenuText(): void {
   const pMode = PROTOCOLS[state.curProtIdx];
@@ -375,7 +377,21 @@ export function setupMenuListeners(): void {
     const profBestStreak = document.getElementById('prof-best-streak');
     if (profStreak) profStreak.innerText = String(profile.currentStreak);
     if (profBestStreak) profBestStreak.innerText = String(profile.longestStreak);
+    const profCallsign = document.getElementById('prof-callsign');
+    if (profCallsign) profCallsign.textContent = profile.display_name || '— not set —';
     updateReducedMotionText();
+  });
+
+  // Change callsign — reuses the same modal as first-run naming, in rename mode
+  document.getElementById('change-callsign-btn')!.addEventListener('click', () => {
+    initAudio();
+    void promptDisplayName().then(name => {
+      if (!name) return; // user cancelled — no change
+      setDisplayName(name);
+      const profCallsign = document.getElementById('prof-callsign');
+      if (profCallsign) profCallsign.textContent = name;
+      playTone('buy');
+    });
   });
 
   // Settings modal

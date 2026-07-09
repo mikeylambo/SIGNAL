@@ -8,12 +8,19 @@ import type { LeaderboardRow } from '../types';
 export function promptDisplayName(): Promise<string | null> {
   return new Promise(resolve => {
     const modal   = document.getElementById('display-name-modal')!;
+    const titleEl = document.getElementById('display-name-title')!;
     const input   = document.getElementById('display-name-input') as HTMLInputElement;
     const confirm = document.getElementById('display-name-confirm')!;
     const skip    = document.getElementById('display-name-skip')!;
     const errorEl = document.getElementById('display-name-error')!;
 
-    input.value = '';
+    // Same modal serves two contexts: first-run setup (no existing name) and
+    // rename from the Stats screen (existing name present) — recomputed fresh
+    // each open so it always matches current profile state.
+    const hasExisting = !!profile.display_name;
+    titleEl.textContent = hasExisting ? 'Change Callsign' : 'Choose a Name';
+    skip.textContent = hasExisting ? 'Cancel' : 'Skip';
+    input.value = profile.display_name ?? '';
     errorEl.style.display = 'none';
     modal.style.display = 'flex';
     setTimeout(() => input.focus(), 50);

@@ -408,6 +408,16 @@
     <div id="profile-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="profile-screen-title">
         <div class="modal-container" style="border-color: var(--correct);">
             <h2 id="profile-screen-title" style="color: var(--correct);">Stats</h2>
+            <div id="callsign-row" style="
+                display:flex; align-items:center; justify-content:space-between;
+                background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.08);
+                border-radius:4px; padding:10px 14px; margin-bottom:1.2rem;">
+                <div style="text-align:left;">
+                    <div style="font-family:var(--font-display); font-size:0.62rem; color:var(--text-muted); letter-spacing:1.5px; text-transform:uppercase;">Callsign</div>
+                    <div id="prof-callsign" style="font-family:var(--font-mono); font-size:0.95rem; color:var(--text); font-weight:700;">—</div>
+                </div>
+                <button id="change-callsign-btn" class="btn-small" style="width:auto; padding:8px 14px;">Change</button>
+            </div>
             <div class="final-stats">
                 <div class="stat-box"><span class="stat-label">Total Runs</span><span class="stat-value" id="prof-runs">0</span></div>
                 <div class="stat-box"><span class="stat-label">Lifetime Score</span><span class="stat-value" id="prof-score">0</span></div>

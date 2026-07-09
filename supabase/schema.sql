@@ -110,3 +110,33 @@ $$;
 -- Allow anon callers to invoke submit_score via supabase.rpc()
 grant execute on function submit_score to anon;
 grant execute on function submit_score to authenticated;
+
+-- ── update_display_name ──────────────────────────────────────────────────────
+-- Lets a returning player rename themselves across every board they've already
+-- appeared on, independent of submit_score()'s "only if score improved" guard.
+-- SECURITY DEFINER: bypasses RLS the same way submit_score() does.
+create or replace function update_display_name(
+  p_player_id    uuid,
+  p_display_name text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_display_name is null or length(trim(p_display_name)) = 0 then
+    raise exception 'display_name is required';
+  end if;
+  if length(p_display_name) > 32 then
+    raise exception 'display_name exceeds 32 characters';
+  end if;
+
+  update leaderboard_scores
+  set display_name = trim(p_display_name)
+  where player_id = p_player_id;
+end;
+$$;
+
+grant execute on function update_display_name to anon;
+grant execute on function update_display_name to authenticated;
