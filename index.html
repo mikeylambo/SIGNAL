@@ -394,11 +394,12 @@
                     letter-spacing:0.5px;">available now</div>
             </div>
 
-            <!-- Stats · Style · Shop -->
+            <!-- Stats · Style · Shop · Boards -->
             <div style="display:flex; gap:6px;">
                 <button id="profile-btn" class="btn-small" style="flex:1;">Stats</button>
                 <button id="forge-btn" class="btn-small" style="flex:1;">Settings</button>
                 <button id="store-btn" class="btn-small btn-store" style="flex:1;">Shop</button>
+                <button id="leaderboard-browser-btn" class="btn-small" style="flex:1;">Boards</button>
             </div>
 
         </div>
@@ -541,6 +542,31 @@
             </div>
             <div id="store-items-container" style="max-height: 250px; overflow-y: auto; margin-bottom: 20px;"></div>
             <button id="close-store-btn" class="btn-small">Close</button>
+        </div>
+    </div>
+
+    <!-- Leaderboards Browser Modal -->
+    <div id="leaderboard-browser-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="leaderboard-browser-title">
+        <div class="modal-container" style="border-color: var(--active); max-width: 440px;">
+            <h2 id="leaderboard-browser-title">Leaderboards</h2>
+
+            <button id="lb-daily-chip" style="
+                display:block; width:100%; margin-bottom:14px;
+                background:none; border:1px solid rgba(255,255,255,0.12); border-radius:3px;
+                padding:9px 12px; font-family:var(--font-mono); font-size:0.72rem;
+                letter-spacing:1px; color:var(--text-muted); cursor:pointer;">
+                ◆ Daily Calibration
+            </button>
+
+            <div id="lb-protocol-row" style="display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:6px;"></div>
+            <div id="lb-pacing-row" style="display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:16px;"></div>
+
+            <div style="text-align:left;">
+                <div id="lb-browser-title" style="font-family:var(--font-display); font-size:0.78rem; color:var(--active); margin-bottom:10px; letter-spacing:1.5px; text-transform:uppercase;"></div>
+                <div id="lb-browser-body" style="max-height:280px; overflow-y:auto; border:1px solid rgba(255,255,255,0.06); border-radius:3px; background:rgba(0,0,0,0.3); margin-bottom:1.5rem;"></div>
+            </div>
+
+            <button id="close-leaderboard-browser-btn" class="btn-small">Close</button>
         </div>
     </div>
 

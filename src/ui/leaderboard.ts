@@ -1,7 +1,10 @@
-import { fetchBoard } from '../game/leaderboard';
+import { fetchBoard, modeBoardKey, dailyBoardKey } from '../game/leaderboard';
 import { profile } from '../save';
 import { isReducedMotion } from '../reducedMotion';
 import type { LeaderboardRow } from '../types';
+import { PROTOCOLS, PACINGS } from '../game/protocols';
+import { state } from '../state';
+import { returnToMenu } from './modals';
 
 // ── Display name prompt ────────────────────────────────────────────────────────
 
@@ -66,20 +69,33 @@ export function promptDisplayName(): Promise<string | null> {
 
 // ── Leaderboard panel ──────────────────────────────────────────────────────────
 
-export async function showLeaderboardPanel(mode: string): Promise<void> {
-  const body  = document.getElementById('leaderboard-body')!;
-  const titleEl = document.getElementById('leaderboard-title');
+/**
+ * Fetches and renders `mode`'s top scores into an arbitrary body element,
+ * with an optional title element. Shared by the end-of-run panel and the
+ * standalone leaderboard browser so both stay in sync with one implementation.
+ */
+export async function renderBoardInto(
+  mode: string,
+  bodyEl: HTMLElement,
+  titleEl?: HTMLElement | null,
+): Promise<void> {
   if (titleEl) titleEl.textContent = formatModeTitle(mode);
 
   // Skeleton renders synchronously before the await so the panel fills immediately
-  body.innerHTML = buildSkeleton();
+  bodyEl.innerHTML = buildSkeleton();
 
   try {
     const scores = await fetchBoard(mode, 10);
-    renderRows(scores, body);
+    renderRows(scores, bodyEl);
   } catch {
-    body.innerHTML = '<div style="padding:12px;font-family:var(--font-mono);font-size:0.78rem;color:var(--text-muted);">Could not load leaderboard.</div>';
+    bodyEl.innerHTML = '<div style="padding:12px;font-family:var(--font-mono);font-size:0.78rem;color:var(--text-muted);">Could not load leaderboard.</div>';
   }
+}
+
+export async function showLeaderboardPanel(mode: string): Promise<void> {
+  const body    = document.getElementById('leaderboard-body')!;
+  const titleEl = document.getElementById('leaderboard-title');
+  await renderBoardInto(mode, body, titleEl);
 }
 
 // "daily_2026-06-22" → "DAILY · JUN 22"
@@ -128,4 +144,108 @@ function renderRows(scores: LeaderboardRow[], body: HTMLElement): void {
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Standalone leaderboard browser ───────────────────────────────────────────
+// Lets players check any board from the menu, independent of playing a run.
+// Reuses renderBoardInto() so rendering never drifts from the end-of-run panel.
+
+let browserProtocolIdx = 0;
+let browserPacingIdx = 0;
+let browserIsDaily = false;
+
+function currentBrowserMode(): string {
+  if (browserIsDaily) return dailyBoardKey(new Date().toISOString().split('T')[0]);
+  return modeBoardKey(PROTOCOLS[browserProtocolIdx].id, PACINGS[browserPacingIdx].id);
+}
+
+function refreshBrowserChips(): void {
+  const dailyChip = document.getElementById('lb-daily-chip') as HTMLButtonElement;
+  dailyChip.style.borderColor = browserIsDaily ? 'var(--active)' : 'rgba(255,255,255,0.12)';
+  dailyChip.style.color       = browserIsDaily ? 'var(--active)' : 'var(--text-muted)';
+
+  document.querySelectorAll<HTMLButtonElement>('.lb-protocol-chip').forEach((btn, i) => {
+    const active = !browserIsDaily && i === browserProtocolIdx;
+    btn.style.borderColor = active ? 'var(--active)' : 'rgba(255,255,255,0.12)';
+    btn.style.color       = active ? 'var(--active)' : 'var(--text-muted)';
+  });
+  document.querySelectorAll<HTMLButtonElement>('.lb-pacing-chip').forEach((btn, i) => {
+    const active = !browserIsDaily && i === browserPacingIdx;
+    btn.style.borderColor = active ? 'var(--active)' : 'rgba(255,255,255,0.12)';
+    btn.style.color       = active ? 'var(--active)' : 'var(--text-muted)';
+  });
+}
+
+async function refreshBrowserBoard(): Promise<void> {
+  refreshBrowserChips();
+  const body    = document.getElementById('lb-browser-body')!;
+  const titleEl = document.getElementById('lb-browser-title');
+  await renderBoardInto(currentBrowserMode(), body, titleEl);
+}
+
+function chipStyle(): string {
+  return 'background:none; border:1px solid rgba(255,255,255,0.12); border-radius:3px; ' +
+    'padding:7px 11px; font-family:var(--font-mono); font-size:0.7rem; letter-spacing:0.5px; ' +
+    'color:var(--text-muted); cursor:pointer; white-space:nowrap;';
+}
+
+/** Builds the protocol/pacing chip rows once. Safe to call multiple times — clears first. */
+function buildBrowserChips(): void {
+  const protocolRow = document.getElementById('lb-protocol-row')!;
+  const pacingRow   = document.getElementById('lb-pacing-row')!;
+  protocolRow.innerHTML = '';
+  pacingRow.innerHTML = '';
+
+  PROTOCOLS.forEach((p, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'lb-protocol-chip';
+    btn.style.cssText = chipStyle();
+    btn.textContent = p.name;
+    btn.addEventListener('click', () => {
+      browserProtocolIdx = i;
+      browserIsDaily = false;
+      void refreshBrowserBoard();
+    });
+    protocolRow.appendChild(btn);
+  });
+
+  PACINGS.forEach((p, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'lb-pacing-chip';
+    btn.style.cssText = chipStyle();
+    btn.textContent = p.name;
+    btn.addEventListener('click', () => {
+      browserPacingIdx = i;
+      browserIsDaily = false;
+      void refreshBrowserBoard();
+    });
+    pacingRow.appendChild(btn);
+  });
+}
+
+let browserChipsBuilt = false;
+
+/** Opens the leaderboard browser, defaulting to whatever mode is currently selected in the menu. */
+export function openLeaderboardBrowser(): void {
+  if (!browserChipsBuilt) {
+    buildBrowserChips();
+    browserChipsBuilt = true;
+  }
+
+  browserProtocolIdx = state.curProtIdx;
+  browserPacingIdx = state.curPaceIdx;
+  browserIsDaily = false;
+
+  (document.getElementById('ui-layer') as HTMLElement).style.display = 'none';
+  (document.getElementById('leaderboard-browser-screen') as HTMLElement).style.display = 'flex';
+
+  void refreshBrowserBoard();
+}
+
+export function setupLeaderboardBrowser(): void {
+  document.getElementById('lb-daily-chip')!.addEventListener('click', () => {
+    browserIsDaily = true;
+    void refreshBrowserBoard();
+  });
+  document.getElementById('close-leaderboard-browser-btn')!.addEventListener('click', returnToMenu);
 }

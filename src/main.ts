@@ -4,6 +4,7 @@ import { state } from './state';
 import { applyTheme, currentThemeKey, t, setThemeChangeCallback, profile, saveProfile } from './save';
 import { updateMenuText, setupMenuListeners } from './ui/menu';
 import { setupModalListeners, returnToMenu } from './ui/modals';
+import { setupLeaderboardBrowser } from './ui/leaderboard';
 import { onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchMove, onWindowResize } from './input';
 import { cubes, setCubeState, createBoard } from './render/board';
 import type { CubeUserData } from './types';
@@ -97,6 +98,7 @@ window.addEventListener('load', () => {
   startRenderLoop();
   setupMenuListeners();
   setupModalListeners();
+  setupLeaderboardBrowser();
 
   // Measure menu sheet height → CSS var so controls-hint sits just above it.
   function updateMenuSheetHeight(): void {

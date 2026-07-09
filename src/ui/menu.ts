@@ -8,7 +8,7 @@ import { AUDIO_UNLOCKS, isAudioUnlocked, buyAudioUnlock, isAudioFeatureEnabled, 
 import { renderStatsBar } from './hud';
 import { returnToMenu, updateReducedMotionText } from './modals';
 import { initGame, stopTimer, startOnboardingRound } from '../game/runLoop';
-import { promptDisplayName } from './leaderboard';
+import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
 import { setDisplayName } from '../game/leaderboard';
 
 export function updateMenuText(): void {
@@ -476,6 +476,12 @@ export function setupMenuListeners(): void {
 
   document.getElementById('close-store-btn')!.addEventListener('click', returnToMenu);
   // Audio unlock buy buttons are wired dynamically in populateStore()
+
+  // Leaderboards browser
+  document.getElementById('leaderboard-browser-btn')!.addEventListener('click', () => {
+    initAudio();
+    openLeaderboardBrowser();
+  });
 
   // Streak inline expansion toggle
   let streakExpanded = false;

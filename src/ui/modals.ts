@@ -20,6 +20,7 @@ export function returnToMenu(): void {
   (document.getElementById('profile-screen') as HTMLElement).style.display = 'none';
   (document.getElementById('forge-screen')   as HTMLElement).style.display = 'none';
   (document.getElementById('store-screen')   as HTMLElement).style.display = 'none';
+  (document.getElementById('leaderboard-browser-screen') as HTMLElement).style.display = 'none';
   (document.getElementById('ui-layer')       as HTMLElement).style.display = 'flex';
   (document.getElementById('ui-layer')       as HTMLElement).style.opacity  = '1';
 
