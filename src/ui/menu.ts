@@ -10,6 +10,7 @@ import { returnToMenu, updateReducedMotionText, pauseGame } from './modals';
 import { initGame, startOnboardingRound } from '../game/runLoop';
 import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
 import { setDisplayName } from '../game/leaderboard';
+import { renderMasteryList } from '../progression';
 
 export function updateMenuText(): void {
   const pMode = PROTOCOLS[state.curProtIdx];
@@ -317,18 +318,12 @@ export function setupMenuListeners(): void {
   protocolBtn.addEventListener('click', () => {
     initAudio();
     state.curProtIdx = (state.curProtIdx + 1) % PROTOCOLS.length;
-    if (PROTOCOLS[state.curProtIdx].id === 'nback' && PACINGS[state.curPaceIdx].id === 'sprint') {
-      state.curPaceIdx = 0;
-    }
     updateMenuText();
   });
 
   pacingBtn.addEventListener('click', () => {
     initAudio();
     state.curPaceIdx = (state.curPaceIdx + 1) % PACINGS.length;
-    if (PROTOCOLS[state.curProtIdx].id === 'nback' && PACINGS[state.curPaceIdx].id === 'sprint') {
-      state.curPaceIdx = 0;
-    }
     updateMenuText();
   });
 
@@ -355,8 +350,10 @@ export function setupMenuListeners(): void {
     state.isDailyRun = true;
     const now = new Date();
     const seed = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    // 2-Back is no longer excluded from the daily rotation — it was skipped
+    // because it ignored pacing and behaved unpredictably; now that it honours
+    // all three, it's a legitimate daily draw like any other protocol.
     state.curProtIdx = seed % PROTOCOLS.length;
-    if (PROTOCOLS[state.curProtIdx].id === 'nback') state.curProtIdx = 0;
     state.curPaceIdx = 0;
     initGame();
   });
@@ -382,6 +379,7 @@ export function setupMenuListeners(): void {
     if (profBestStreak) profBestStreak.innerText = String(profile.longestStreak);
     const profCallsign = document.getElementById('prof-callsign');
     if (profCallsign) profCallsign.textContent = profile.display_name || '— not set —';
+    renderMasteryList();
     updateReducedMotionText();
   });
 

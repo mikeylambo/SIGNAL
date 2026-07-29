@@ -38,6 +38,12 @@ export const state = {
   // in-flight Observe sequence / n-Back stream / level-complete timeout that
   // belongs to an abandoned run can't write to shared state or drive UI.
   runId: 0,
+  // Token for the n-Back stream specifically. Zen and Sprint restart the stream
+  // mid-run after a mistake, which is NOT a new run — so it can't use runId.
+  // Without a separate token the outgoing stream loop, parked in an await, wakes
+  // after the replacement has already set nBackActive back to true and both run
+  // at once, double-flashing tiles and double-counting clicks.
+  nBackStreamId: 0,
 };
 
 /** Invalidates the current run so any in-flight async gameplay step aborts. */

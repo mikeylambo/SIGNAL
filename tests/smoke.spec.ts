@@ -35,16 +35,54 @@ async function startGame(page: Page): Promise<void> {
   await page.waitForTimeout(COUNTDOWN_MS);
 }
 
-// Reach results screen by clicking a guaranteed-wrong tile (not in pattern).
-// Uses __signal to find a non-pattern tile via exact Three.js projection.
+// Reach the results screen by forcing a mistake, in whatever protocol is active.
+//
+// Must be protocol-aware: in 2-Back, taps on a tile that is not currently
+// flashing are ignored outright, so the "click a non-pattern tile" trick used
+// for the grid protocols does nothing at all. The daily challenge rotates
+// through every protocol by date — 2-Back included — so a helper that only
+// understood grid protocols made these tests pass or fail depending on the day.
 async function triggerGameOver(page: Page): Promise<void> {
   await startGame(page);
   await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+  await forceMistake(page);
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 10000 });
+}
 
-  type SignalHandle = {
-    getState: () => { pattern: number[] };
-    getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
-  };
+type SignalState = {
+  pattern: number[];
+  nBackStream: number[];
+  nBackStep: number;
+  nBackIsFlashing: boolean;
+  nBackActive: boolean;
+};
+type SignalHandle = {
+  getState: () => SignalState;
+  getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
+};
+
+async function forceMistake(page: Page): Promise<void> {
+  const isNBack = await page.evaluate(
+    () => (window as Window & { __signal?: SignalHandle }).__signal!.getState().nBackActive,
+  );
+
+  if (isNBack) {
+    // Wait for a flash that is NOT a 2-back match, then tap it: a false alarm.
+    for (let i = 0; i < 120; i++) {
+      const shot = await page.evaluate(() => {
+        const sig = (window as Window & { __signal?: SignalHandle }).__signal!;
+        const s = sig.getState();
+        if (!s.nBackIsFlashing) return null;
+        const isMatch = s.nBackStep >= 2 && s.nBackStream[s.nBackStep] === s.nBackStream[s.nBackStep - 2];
+        if (isMatch) return null;
+        return sig.getCubeScreenPos(s.nBackStream[s.nBackStep]);
+      });
+      if (shot) { await page.mouse.click(shot.x, shot.y); return; }
+      await page.waitForTimeout(60);
+    }
+    throw new Error('never observed a non-match flash to tap');
+  }
+
   const wrongPos = await page.evaluate(() => {
     const sig = (window as Window & { __signal?: SignalHandle }).__signal;
     if (!sig) return null;
@@ -61,8 +99,6 @@ async function triggerGameOver(page: Page): Promise<void> {
     const box = await page.locator('canvas').boundingBox();
     if (box) await page.mouse.click(box.x + 2, box.y + 2);
   }
-
-  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 8000 });
 }
 
 // Returns the level shown in the HUD (val-lvl element).
@@ -385,22 +421,7 @@ test('streak increments after a completed daily run reaches results screen', asy
   await page.waitForTimeout(COUNTDOWN_MS);
   await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
-  type SignalHandle = {
-    getState: () => { pattern: number[] };
-    getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
-  };
-  const wrongPos = await page.evaluate(() => {
-    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
-    if (!sig) return null;
-    const { pattern } = sig.getState();
-    for (let i = 0; i < 9; i++) {
-      if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
-    }
-    return null;
-  });
-  if (wrongPos) {
-    await page.mouse.click(wrongPos.x, wrongPos.y);
-  }
+  await forceMistake(page);
 
   // Streak should now be 4 (was 3, last daily was yesterday)
   await expect(page.locator('#streak-line')).toBeVisible({ timeout: 5000 });
@@ -444,22 +465,7 @@ test('streak resets after a gap day', async ({ page }) => {
   await page.waitForTimeout(COUNTDOWN_MS);
   await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
-  type SignalHandle = {
-    getState: () => { pattern: number[] };
-    getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
-  };
-  const wrongPos = await page.evaluate(() => {
-    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
-    if (!sig) return null;
-    const { pattern } = sig.getState();
-    for (let i = 0; i < 9; i++) {
-      if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
-    }
-    return null;
-  });
-  if (wrongPos) {
-    await page.mouse.click(wrongPos.x, wrongPos.y);
-  }
+  await forceMistake(page);
 
   // streak reset to 1 — streak-line should be hidden (day 1 doesn't show)
   await expect(page.locator('#streak-line')).toBeHidden({ timeout: 2000 });
@@ -512,20 +518,7 @@ test('daily mode key is date-scoped', async ({ page }) => {
   await page.waitForTimeout(COUNTDOWN_MS);
   await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
 
-  type SignalHandle = {
-    getState: () => { pattern: number[] };
-    getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
-  };
-  const wrongPos = await page.evaluate(() => {
-    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
-    if (!sig) return null;
-    const { pattern } = sig.getState();
-    for (let i = 0; i < 9; i++) {
-      if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
-    }
-    return null;
-  });
-  if (wrongPos) await page.mouse.click(wrongPos.x, wrongPos.y);
+  await forceMistake(page);
 
   await expect(page.locator('#results-screen')).toBeVisible({ timeout: 8000 });
   await expect(page.locator('#leaderboard-panel')).toBeVisible({ timeout: 6000 });
@@ -639,4 +632,92 @@ test('SFX toggle actually gates sound synthesis', async ({ page }) => {
     return count;
   });
   expect(oscillatorsCreated).toBe(0);
+});
+
+// ── 2-Back pacing ─────────────────────────────────────────────────────────────
+
+test('2-Back honours all three pacings', async ({ page }) => {
+  // Regression: n-Back overrode pacing entirely, so "2-Back + Zen" advertised
+  // "No timer. Streak-based." and then ended the run on the first mistake, and
+  // "2-Back + Sprint" could not even be selected (the menu bounced it back to
+  // Classic).
+  await page.goto('/');
+  for (let i = 0; i < 4; i++) await page.locator('#protocol-btn').click();
+  await expect(page.locator('#protocol-btn')).toHaveText('2-Back');
+
+  // All three pacings must now be reachable with 2-Back selected.
+  const seen: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    seen.push((await page.locator('#pacing-btn').textContent()) ?? '');
+    await page.locator('#pacing-btn').click();
+  }
+  expect(seen.sort()).toEqual(['Classic', 'Sprint', 'Zen']);
+});
+
+test('2-Back + Sprint runs a 60s clock; 2-Back + Classic runs none', async ({ page }) => {
+  await page.goto('/');
+  for (let i = 0; i < 4; i++) await page.locator('#protocol-btn').click();
+  for (let i = 0; i < 2; i++) await page.locator('#pacing-btn').click();  // → Sprint
+  await expect(page.locator('#pacing-btn')).toHaveText('Sprint');
+  await page.locator('#start-btn').click();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+
+  const sprint = await page.evaluate(
+    () => (window as Window & { __signal?: { getState: () => { timerActive: boolean; timeLeft: number } } })
+      .__signal!.getState(),
+  );
+  expect(sprint.timerActive).toBe(true);
+  expect(sprint.timeLeft).toBeGreaterThan(30000);
+  await expect(page.locator('#stress-bar-container')).toBeVisible();
+
+  // Classic 2-Back has no timer, so the stress bar stays hidden rather than
+  // sitting full and motionless.
+  await page.goto('/');
+  for (let i = 0; i < 4; i++) await page.locator('#protocol-btn').click();
+  await expect(page.locator('#pacing-btn')).toHaveText('Classic');
+  await page.locator('#start-btn').click();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+  const classic = await page.evaluate(
+    () => (window as Window & { __signal?: { getState: () => { timerActive: boolean } } })
+      .__signal!.getState(),
+  );
+  expect(classic.timerActive).toBe(false);
+  await expect(page.locator('#stress-bar-container')).toBeHidden();
+});
+
+// ── Progression ───────────────────────────────────────────────────────────────
+
+test('protocol mastery accrues and renders in Stats', async ({ page }) => {
+  await page.goto('/');
+  await triggerGameOver(page);
+
+  await expect(page.locator('#mastery-panel')).toBeVisible({ timeout: 6000 });
+  await expect(page.locator('#mastery-detail')).toContainText('mastery');
+
+  const stored = await page.evaluate(() => {
+    const saved = localStorage.getItem('sig_profile_v1');
+    return saved ? (JSON.parse(saved) as {
+      schemaVersion: number;
+      protocolMastery: Record<string, { points: number; runs: number; history: unknown[] }>;
+    }) : null;
+  });
+  expect(stored?.schemaVersion).toBe(12);
+  expect(stored?.protocolMastery['spatial'].runs).toBe(1);
+  expect(stored?.protocolMastery['spatial'].points).toBeGreaterThan(0);
+  expect(stored?.protocolMastery['spatial'].history).toHaveLength(1);
+
+  // Stats screen lists every protocol, unplayed ones included.
+  await page.locator('#menu-btn').click();
+  await page.locator('#profile-btn').click();
+  await expect(page.locator('#prof-mastery-list > div')).toHaveCount(5);
+  await expect(page.locator('#prof-mastery-total')).toContainText('/ 50');
+});
+
+test('an unplayed protocol reads as Unranked, not rank I', async ({ page }) => {
+  // Regression: the first rank threshold was 0, so every protocol on a brand
+  // new save scored rank I and the Stats total opened at 5/50.
+  await page.goto('/');
+  await page.locator('#profile-btn').click();
+  await expect(page.locator('#prof-mastery-total')).toHaveText('0 / 50');
+  await expect(page.locator('#prof-mastery-list')).toContainText('Unranked');
 });

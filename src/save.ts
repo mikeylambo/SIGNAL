@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -47,6 +47,7 @@ const SaveSystem = (() => {
       },
       activeCustomSlot: 'custom1',
       hasCompletedOnboarding: false,
+      protocolMastery: {},
     };
   }
 
@@ -127,6 +128,14 @@ const SaveSystem = (() => {
       // via verify_or_claim_owner() the same way it would for a brand-new player_id.
       raw.owner_secret = crypto.randomUUID();
       raw.schemaVersion = 11;
+    }
+    if (raw.schemaVersion < 12) {
+      // v11 → v12: per-protocol mastery (see progression.ts). Purely additive —
+      // existing players start every protocol unranked rather than being
+      // retro-credited, since lifetime stats aren't broken down by protocol and
+      // any backfill would be invented.
+      raw.protocolMastery = {};
+      raw.schemaVersion = 12;
     }
     return raw;
   }

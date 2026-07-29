@@ -1,4 +1,4 @@
-import { fetchBoard, modeBoardKey, dailyBoardKey } from '../game/leaderboard';
+import { fetchBoard, modeBoardKey, dailyBoardKey, reportPlayer } from '../game/leaderboard';
 import { profile } from '../save';
 import { isReducedMotion } from '../reducedMotion';
 import type { LeaderboardRow } from '../types';
@@ -81,6 +81,7 @@ export async function renderBoardInto(
   limit = 10,
 ): Promise<void> {
   if (titleEl) titleEl.textContent = formatModeTitle(mode);
+  bindReportHandler();
 
   // Skeleton renders synchronously before the await so the panel fills immediately
   bodyEl.innerHTML = buildSkeleton();
@@ -148,15 +149,59 @@ function renderRows(scores: LeaderboardRow[], body: HTMLElement): void {
     const highlight = isMe
       ? 'color:var(--active);border-left:2px solid var(--active);padding-left:10px;'
       : 'padding-left:12px;';
+    // Every row carries a report control except the player's own. Names are
+    // user-generated content on a public board, so players need an in-app way
+    // to flag one — a store-review requirement, and the only thing that feeds
+    // the server's moderation queue.
+    const reportBtn = isMe
+      ? ''
+      : `<button class="lb-report-btn" data-player="${esc(row.player_id)}" data-name="${esc(row.display_name)}"` +
+        ` aria-label="Report ${esc(row.display_name)}" title="Report this name"` +
+        ` style="width:auto;background:none;border:none;padding:2px 4px;margin:0;cursor:pointer;` +
+        `font-size:0.7rem;line-height:1;color:var(--text-muted);opacity:0.45;">⚑</button>`;
     return [
       `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;`,
       `border-bottom:1px solid rgba(255,255,255,0.04);${highlight}">`,
       `<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-muted);min-width:20px;">${row.rank}</span>`,
       `<span style="font-family:var(--font-display);font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(row.display_name)}</span>`,
       `<span style="font-family:var(--font-mono);font-size:0.82rem;font-weight:700;">${row.score.toLocaleString()}</span>`,
+      reportBtn,
       `</div>`,
     ].join('');
   }).join('');
+}
+
+/**
+ * One delegated listener on document, rather than per-row handlers rebound on
+ * every render — rows are replaced wholesale by innerHTML on each fetch, and
+ * both the results panel and the browser render through renderRows().
+ */
+let reportListenerBound = false;
+
+function bindReportHandler(): void {
+  if (reportListenerBound) return;
+  reportListenerBound = true;
+
+  document.addEventListener('click', async (e) => {
+    const target = (e.target as HTMLElement | null)?.closest('.lb-report-btn');
+    if (!(target instanceof HTMLElement)) return;
+
+    const playerId = target.dataset['player'];
+    const name = target.dataset['name'] ?? 'this name';
+    if (!playerId) return;
+
+    if (!window.confirm(`Report "${name}" for review?`)) return;
+
+    target.textContent = '…';
+    const ok = await reportPlayer(playerId);
+    // Either way the control retires for this row: a repeat report is a no-op
+    // server-side, so leaving it live would only invite confusion.
+    target.textContent = ok ? '✓' : '⚑';
+    target.setAttribute('disabled', 'true');
+    target.style.pointerEvents = 'none';
+    target.style.opacity = ok ? '0.8' : '0.3';
+    target.title = ok ? 'Reported — thank you' : 'Could not send report';
+  });
 }
 
 function esc(s: string): string {

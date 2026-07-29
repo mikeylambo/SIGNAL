@@ -14,11 +14,6 @@ export function dailyBoardKey(date: string): string {
   return `daily_${date}`;
 }
 
-// ── Client-side profanity filter ───────────────────────────────────────────────
-// This is a last-resort UX guard only — trivially bypassed by a motivated bad actor.
-// For app-store compliance the submit_score DB function is the right place for
-// stronger moderation: a content-classification call, manual report queue, or
-// automated ban list surfaced in a moderation dashboard.
 /**
  * How long to wait on any leaderboard round-trip before giving up.
  * Past ~6s on mobile, "couldn't reach the leaderboard" is a better answer than
@@ -26,6 +21,11 @@ export function dailyBoardKey(date: string): string {
  */
 const FETCH_TIMEOUT_MS = 6000;
 
+// ── Client-side profanity filter ───────────────────────────────────────────────
+// A UX fast-path only: it gives immediate feedback in the naming modal without a
+// round-trip, and is trivially bypassed. The authoritative check lives in the
+// submit_score / update_display_name DB functions (see supabase/schema.sql),
+// which reject the same content server-side no matter what the client sends.
 const BLOCKED_WORDS: ReadonlyArray<string> = [
   'fuck', 'shit', 'cunt', 'bitch', 'dick', 'cock', 'pussy', 'ass',
   'nigger', 'nigga', 'faggot', 'fag', 'retard', 'chink', 'spic', 'kike', 'gook',
@@ -59,7 +59,7 @@ export function setDisplayName(name: string): void {
  */
 async function renameEverywhere(displayName: string): Promise<void> {
   try {
-    const supabase = getClient();
+    const supabase = await getClient();
     const { player_id, owner_secret } = profile;
     if (!player_id || !owner_secret) return;
     if (containsProfanity(displayName)) return;
@@ -93,7 +93,7 @@ export async function submitScore(
   pacing?: string,
 ): Promise<boolean> {
   try {
-    const supabase = getClient();
+    const supabase = await getClient();
     const { player_id, owner_secret, display_name } = profile;
 
     if (!player_id) throw new Error('player_id not initialised');
@@ -125,6 +125,40 @@ export async function submitScore(
   }
 }
 
+// ── Reporting ──────────────────────────────────────────────────────────────────
+
+/**
+ * Flags another player's display name for moderator review.
+ *
+ * The server dedupes by (reported, reporter) and verifies the reporter's
+ * owner_secret, so this can't be used to brigade someone — calling it twice is
+ * a no-op, and a client can only report as an identity it actually owns.
+ *
+ * Resolves `true` when the report was accepted. Never throws: a failed report
+ * should show a neutral message, not break the leaderboard the player is
+ * looking at.
+ */
+export async function reportPlayer(reportedPlayerId: string): Promise<boolean> {
+  try {
+    const supabase = await getClient();
+    const { player_id, owner_secret } = profile;
+    if (!player_id || !owner_secret) return false;
+    if (reportedPlayerId === player_id) return false;
+
+    const { error } = await supabase.rpc('report_player', {
+      p_reported_player_id: reportedPlayerId,
+      p_reporter_player_id: player_id,
+      p_owner_secret:       owner_secret,
+    }).abortSignal(AbortSignal.timeout(FETCH_TIMEOUT_MS));
+
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.warn('[leaderboard] reportPlayer failed:', err);
+    return false;
+  }
+}
+
 // ── Fetch top scores ───────────────────────────────────────────────────────────
 
 /**
@@ -140,7 +174,7 @@ export async function fetchBoard(
   boardKey: string,
   limit = 10,
 ): Promise<LeaderboardRow[]> {
-  const supabase = getClient();
+  const supabase = await getClient();
   // Without this a hung connection leaves the panel on its loading skeleton
   // indefinitely — there was no upper bound on how long a read could pend.
   const { data, error } = await supabase

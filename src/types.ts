@@ -15,6 +15,22 @@ export interface CustomPalette {
   bg: string;
 }
 
+/** One completed run, kept for the per-protocol trend sparkline. */
+export interface MasteryRunRecord {
+  d: string;  // ISO date (short keys — this array is persisted per protocol)
+  s: number;  // score
+  l: number;  // level reached
+}
+
+/** Long-arc progression state for a single protocol. */
+export interface ProtocolMastery {
+  points: number;      // cumulative mastery points; drives rank
+  bestScore: number;
+  bestLevel: number;
+  runs: number;
+  history: MasteryRunRecord[];  // most recent last, capped at MASTERY_HISTORY_LIMIT
+}
+
 export interface SavedProfile {
   schemaVersion: number;
   signal: number;
@@ -48,6 +64,8 @@ export interface SavedProfile {
   customPalettes: Record<string, CustomPalette>;
   activeCustomSlot: string;
   hasCompletedOnboarding: boolean;
+  /** Keyed by protocol id ('spatial', 'sequential', …). See progression.ts. */
+  protocolMastery: Record<string, ProtocolMastery>;
 }
 
 export interface Theme {

@@ -8,6 +8,7 @@ import { playTone, haptic, initAudio } from '../audio';
 import { startGameplayAudio, stopGameplayAudio, spatialPan } from '../audioUnlocks';
 import { addSignal, recordRun, t, profile, saveProfile } from '../save';
 import { recordActivity, recordDailyCompletion, type DailyStreakResult } from '../streaks';
+import { recordProtocolRun, rankNumeral, rankTitle, rankProgress, type MasteryResult } from '../progression';
 import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI, updateStatsUI, renderStatsBar } from '../ui/hud';
 import { delay } from '../utils';
 import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
@@ -55,7 +56,6 @@ function isStale(runId: number): boolean {
 }
 
 export async function runCountdown(runId: number = state.runId): Promise<void> {
-  // Waits for unpause before counting elapsed time — countdown freezes while paused
   // Counts only unpaused time toward `ms`, so pausing mid-countdown freezes it
   // rather than letting the pause duration count as elapsed.
   async function pauseAwareDelay(ms: number): Promise<void> {
@@ -441,12 +441,17 @@ export async function startOnboardingRound(): Promise<void> {
   stressBar.style.backgroundColor = 'var(--active)';
   showCallout('In Classic mode, this is your lifeline.<br>Keep your streak alive before it runs out.');
 
-  const DRAIN_STEPS = 60;
-  for (let i = DRAIN_STEPS; i >= 0; i--) {
-    if (done) break;
-    stressBar.style.width = `${(i / DRAIN_STEPS) * 100}%`;
-    await delay(Math.round(3000 / DRAIN_STEPS));
-  }
+  // Drain the demo bar with a single CSS transition rather than 61 chained
+  // setTimeouts. The stepped version rendered at ~20fps and, more importantly,
+  // took 61 timer round-trips to finish: under CPU contention (software WebGL
+  // in CI, a mid-tier phone under load) those stretch badly, and a 3s animation
+  // could take upwards of 15s — long enough that the tutorial looked hung.
+  // One transition is smooth at display refresh rate and costs one timer.
+  const DRAIN_MS = 3000;
+  stressBar.style.transition = `width ${DRAIN_MS}ms linear`;
+  stressBar.style.width = '0%';
+  await delay(DRAIN_MS);
+  stressBar.style.transition = '';  // restore the stylesheet's 0.1s gameplay easing
   stressBarContainer.style.display = 'none';
   removeCallout();
   if (done) return;
@@ -532,12 +537,15 @@ export async function initGame(): Promise<void> {
 
   renderStatsBar();
 
-  if (pPace.id === 'sprint' && pMode.id !== 'nback') {
+  if (pPace.id === 'sprint') {
+    // Sprint now applies to n-Back too: a 60s clock over a continuous stream.
     state.totalTime = 60000; state.timeLeft = 60000; state.timerActive = false;
     stressBarContainer.style.display = 'block';
     stressBar.style.width = '100%';
     stressBar.style.backgroundColor = 'var(--active)';
-  } else if (pPace.id === 'zen') {
+  } else if (pPace.id === 'zen' || pMode.id === 'nback') {
+    // Classic n-Back has no per-level timer either — the stress bar would just
+    // sit full and motionless, so it stays hidden.
     stressBarContainer.style.display = 'none'; state.timerActive = false;
   } else {
     stressBarContainer.style.display = 'block';
@@ -550,7 +558,7 @@ export async function initGame(): Promise<void> {
   await runCountdown(runId);
   if (isStale(runId)) return;
 
-  if (pPace.id === 'sprint' && pMode.id !== 'nback') {
+  if (pPace.id === 'sprint') {
     state.timerActive = true;
     state.lastFrameTime = performance.now();
     state.timerAnimationId = requestAnimationFrame(runTimer);
@@ -661,16 +669,29 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
 
 export async function startNBackLevel(runId: number = state.runId): Promise<void> {
   const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
-  const stressBar = document.getElementById('stress-bar')!;
+  const stressBarContainer = document.getElementById('stress-bar-container')!;
+  const pPace = PACINGS[state.curPaceIdx];
 
-  state.isPlayable = true; state.timerActive = false; state.nBackActive = true;
+  // Claim this stream. Any previously running stream loop sees the token change
+  // and exits rather than racing this one.
+  const streamId = ++state.nBackStreamId;
+  const streamStale = () => isStale(runId) || state.nBackStreamId !== streamId;
+
+  state.isPlayable = true; state.nBackActive = true;
+  // Sprint's 60s clock spans the whole run and must survive a stream restart;
+  // Classic and Zen n-Back have no timer at all, so the stress bar is hidden
+  // rather than left sitting full and motionless.
+  if (pPace.id !== 'sprint') {
+    state.timerActive = false;
+    stressBarContainer.style.display = 'none';
+  }
   state.userClicks = [];
   updateStatsUI();
   pauseBtn.style.display = 'flex';
   cubes.forEach(c => { setCubeState(c, 'base'); c.userData['targetY'] = 0; c.userData['targetScale'] = 1; });
   showMessage('Stream Active', 'var(--text)');
   await delay(1000);
-  if (isStale(runId)) return;
+  if (streamStale()) return;
 
   const streamLength = 10 + state.level;
   state.nBackStream = [];
@@ -685,11 +706,9 @@ export async function startNBackLevel(runId: number = state.runId): Promise<void
     }
   }
 
-  stressBar.style.width = '100%';
-
   for (let i = 0; i < state.nBackStream.length; i++) {
-    while (state.isPaused) { await delay(100); if (isStale(runId)) return; }
-    if (!state.nBackActive || isStale(runId)) return;
+    while (state.isPaused) { await delay(100); if (streamStale()) return; }
+    if (!state.nBackActive || streamStale()) return;
     state.nBackStep = i;
     const idx = state.nBackStream[i];
     const isMatch = (i >= 2 && state.nBackStream[i] === state.nBackStream[i - 2]);
@@ -705,7 +724,7 @@ export async function startNBackLevel(runId: number = state.runId): Promise<void
     let elapsed = 0;
     let last = Date.now();
     while (elapsed < waitTime) {
-      if (!state.nBackActive || isStale(runId)) return;
+      if (!state.nBackActive || streamStale()) return;
       if (state.isPaused) { await delay(100); last = Date.now(); continue; }
       await delay(20);
       const now = Date.now();
@@ -714,14 +733,30 @@ export async function startNBackLevel(runId: number = state.runId): Promise<void
       if (state.userClicks.includes(i)) { clickedDuringFlash = true; break; }
     }
 
-    if (isStale(runId)) return;
+    if (streamStale()) return;
     state.nBackIsFlashing = false;
     setCubeState(cubes[idx], 'base');
     if (isMatch && !clickedDuringFlash) { handleMistake(cubes[idx], 'MISSED'); return; }
     await delay(300);
-    if (isStale(runId)) return;
+    if (streamStale()) return;
   }
-  if (state.nBackActive && !isStale(runId)) levelComplete();
+  if (state.nBackActive && !streamStale()) levelComplete();
+}
+
+/**
+ * Restarts the n-Back stream after a non-fatal mistake (Zen and Sprint). Bumping
+ * the stream token first guarantees the loop that just failed is retired before
+ * its replacement starts.
+ */
+function restartNBackStream(runId: number, delayMs: number): void {
+  state.nBackActive = false;
+  state.isPlayable = false;
+  state.nBackStreamId++;
+  setTimeout(() => {
+    if (isStale(runId)) return;
+    createBoard();
+    void startNBackLevel(runId);
+  }, delayMs);
 }
 
 export function handleInteraction(cube: THREE.Mesh): void {
@@ -820,17 +855,30 @@ export function handleMistake(wrongCube: THREE.Mesh | null, reason: string): voi
   // Tutorial intercept: skip all pacing/game-over logic when onboarding is active
   if (_ob.onMistake) { const fn = _ob.onMistake; clearOnboardingHooks(); fn(); return; }
 
-  if (pPace.id === 'classic' || pMode.id === 'nback') {
+  // n-Back now honours the selected pacing like every other protocol. It used
+  // to force Classic permadeath regardless, so picking "2-Back + Zen" showed
+  // "No timer. Streak-based." and then ended the run on the first mistake.
+  const isNBack = pMode.id === 'nback';
+
+  if (pPace.id === 'classic') {
     state.nBackActive = false;
     gameOver(reason || 'RUN ENDED');
   } else if (pPace.id === 'zen') {
     state.mistakes++; state.streak = 0; updateStatsUI();
     showMessage(reason || 'OVERLOAD', 'var(--wrong)');
     if (state.level > 1 && state.mistakes % 2 === 0) {
-      state.level--; state.activeCount = Math.max(3, state.activeCount - 1);
-      if (state.level % 3 === 0) state.gridSize = Math.max(3, state.gridSize - 1);
+      state.level--;
+      if (isNBack) {
+        // n-Back difficulty is stream length and flash speed, both derived from
+        // level, so it needs no activeCount/gridSize walk-back.
+        state.gridSize = Math.max(3, state.gridSize);
+      } else {
+        state.activeCount = Math.max(3, state.activeCount - 1);
+        if (state.level % 3 === 0) state.gridSize = Math.max(3, state.gridSize - 1);
+      }
       playTone('levelDown');
     }
+    if (isNBack) { restartNBackStream(runId, 1500); return; }
     setTimeout(() => {
       if (isStale(runId)) return;
       createBoard(); startLevel(runId);
@@ -840,10 +888,14 @@ export function handleMistake(wrongCube: THREE.Mesh | null, reason: string): voi
     showMessage('PENALTY −3s', 'var(--wrong)');
     flashScreen('var(--wrong)');
     if (state.level > 1 && state.mistakes % 3 === 0) {
-      state.level--; state.activeCount = Math.max(3, state.activeCount - 1);
-      if (state.level % 3 === 0) state.gridSize = Math.max(3, state.gridSize - 1);
+      state.level--;
+      if (!isNBack) {
+        state.activeCount = Math.max(3, state.activeCount - 1);
+        if (state.level % 3 === 0) state.gridSize = Math.max(3, state.gridSize - 1);
+      }
       playTone('levelDown');
     }
+    if (isNBack) { restartNBackStream(runId, 700); return; }
     cameraShake(0.4, 350, () => {
       if (isStale(runId)) return;
       createBoard(); startLevel(runId);
@@ -868,7 +920,7 @@ export async function levelComplete(): Promise<void> {
   if (wasTutorial) return;
   const oldLevel = state.level;
 
-  if (pPace.id === 'classic' || pMode.id === 'nback') { state.score += 50; state.level++; }
+  if (pPace.id === 'classic') { state.score += 50; state.level++; }
   else if (pPace.id === 'zen') {
     state.streak++;
     if (state.streak > state.maxStreak) state.maxStreak = state.streak;
@@ -888,7 +940,9 @@ export async function levelComplete(): Promise<void> {
   await delay(800);
   if (isStale(runId)) return;
 
-  if (state.level > oldLevel) {
+  // n-Back scales via stream length and flash speed (both level-derived), not
+  // pattern size, so it skips the activeCount/gridSize growth entirely.
+  if (state.level > oldLevel && pMode.id !== 'nback') {
     if (state.level % 2 === 0) state.activeCount = Math.min(10, state.activeCount + 1);
     if (state.level % 3 === 0 && state.gridSize < 6) {
       state.gridSize++;
@@ -995,14 +1049,21 @@ export async function showResultsScreen(): Promise<void> {
     resEarnedFrags.innerText = '0';
   }
 
+  let mastery: MasteryResult | null = null;
   if (!state.isOnboarding) {
     addSignal(state.earnedFragments);
     recordRun({ score: state.score, level: state.level, signalEarned: state.earnedFragments, combo: state.maxCombo });
+    mastery = recordProtocolRun(
+      pMode.id,
+      state.score,
+      state.level,
+      new Date().toISOString().split('T')[0],
+    );
   }
   updateStatsUI();
 
   const comboStat = `<div class="stat-box"><span class="stat-label">Best Combo</span><span class="stat-value" style="color:var(--combo)">${state.maxCombo}×</span></div>`;
-  if (pPace.id === 'classic' || pMode.id === 'nback') {
+  if (pPace.id === 'classic') {
     grid.innerHTML = `<div class="stat-box"><span class="stat-label">Score</span><span class="stat-value">${state.score}</span></div><div class="stat-box"><span class="stat-label">Level</span><span class="stat-value">${state.level}</span></div>${comboStat}`;
   } else if (pPace.id === 'zen') {
     grid.innerHTML = `<div class="stat-box"><span class="stat-label">Max Streak</span><span class="stat-value">${state.maxStreak}</span></div><div class="stat-box"><span class="stat-label">Mistakes</span><span class="stat-value" style="color:var(--wrong)">${state.mistakes}</span></div>${comboStat}`;
@@ -1025,6 +1086,32 @@ export async function showResultsScreen(): Promise<void> {
     streakLineEl.style.color = streakResult.isNewRecord ? 'var(--correct)' : 'var(--combo)';
   } else {
     streakLineEl.style.display = 'none';
+  }
+
+  // B2. Mastery — points earned this run and progress toward the next rank
+  const masteryPanel = document.getElementById('mastery-panel') as HTMLElement;
+  const rankUpLine   = document.getElementById('mastery-rankup-line') as HTMLElement;
+  if (mastery) {
+    const prog = rankProgress(mastery.totalPoints);
+    masteryPanel.style.display = 'block';
+    (document.getElementById('mastery-protocol') as HTMLElement).textContent = pMode.name.toUpperCase();
+    (document.getElementById('mastery-rank') as HTMLElement).textContent =
+      mastery.rank > 0 ? `${rankNumeral(mastery.rank)} · ${rankTitle(mastery.rank).toUpperCase()}` : 'UNRANKED';
+    const bar = document.getElementById('mastery-bar') as HTMLElement;
+    bar.style.width = `${prog.pct}%`;
+    bar.setAttribute('aria-valuenow', String(Math.round(prog.pct)));
+    (document.getElementById('mastery-detail') as HTMLElement).textContent =
+      prog.span > 0
+        ? `+${mastery.pointsGained} mastery · ${prog.into}/${prog.span} to next rank`
+        : `+${mastery.pointsGained} mastery · max rank reached`;
+
+    rankUpLine.style.display = mastery.rankedUp ? 'block' : 'none';
+    if (mastery.rankedUp) {
+      rankUpLine.textContent = `▲ ${pMode.name.toUpperCase()} RANK ${rankNumeral(mastery.rank)} — ${rankTitle(mastery.rank)}`;
+    }
+  } else {
+    masteryPanel.style.display = 'none';
+    rankUpLine.style.display = 'none';
   }
 
   // C. Daily nudge

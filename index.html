@@ -12,10 +12,42 @@
     <meta name="twitter:title" content="SIGNAL — Cognitive Calibration Engine">
     <meta name="twitter:description" content="A 3D memory training game with bloom lighting, haptics, and 5 cognitive protocols. Sharpen your working memory.">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Fonts are self-hosted rather than pulled from fonts.googleapis.com.
+         The CDN version was a render-blocking third-party request on every
+         launch: the game fell back to system fonts offline, and every player
+         made a request to Google before the first frame. These are the same
+         three families as variable fonts, latin subset — 105 KB total for all
+         weights, served from our own origin and cacheable indefinitely. -->
+    <link rel="preload" href="/fonts/sora.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
     <style>
+        /* Variable fonts: one file per family covers the whole weight range,
+           so the 13 separate weight requests the CDN link produced collapse
+           into 3. font-display:swap keeps first paint unblocked. */
+        @font-face {
+            font-family: 'Sora';
+            font-style: normal;
+            font-weight: 100 800;
+            font-display: swap;
+            src: url('/fonts/sora.woff2') format('woff2');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 100 800;
+            font-display: swap;
+            src: url('/fonts/jetbrains-mono.woff2') format('woff2');
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 100 900;
+            font-display: swap;
+            src: url('/fonts/inter.woff2') format('woff2');
+        }
+
         :root {
             --primary: #00E5FF;
             --bg: #05080D;
@@ -188,12 +220,26 @@
 
         .icon-btn { padding: 10px; width: 45px; height: 45px; font-size: 1.2rem; background: rgba(0,0,0,0.6); display: none; border-radius: 50%; justify-content: center; align-items: center; }
 
+        /* Modals must scroll when their content is taller than the viewport.
+           These used to center with justify-content and no overflow, which
+           clips a tall modal at BOTH ends with no way to reach either — the
+           Close button on a long Stats or Results screen simply could not be
+           tapped on a short phone.
+
+           justify-content:flex-start + `margin:auto 0` on the container is the
+           combination that behaves in both directions: the auto margins still
+           center the modal when there's spare room, but collapse instead of
+           clipping once the content overflows, so scrolling reaches the top. */
         .modal-screen {
-            position: fixed; inset: 0; background: var(--bg-modal); backdrop-filter: blur(20px); z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; box-sizing: border-box; transition: background 0.5s;
+            position: fixed; inset: 0; background: var(--bg-modal); backdrop-filter: blur(20px); z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: flex-start; padding: 1.5rem; box-sizing: border-box; transition: background 0.5s;
+            overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+            padding-top: calc(1.5rem + var(--sat, 0px));
+            padding-bottom: calc(1.5rem + var(--sab, 0px));
         }
 
         .modal-container {
             background: rgba(10, 15, 22, 0.85); border: 1px solid var(--active); border-radius: 6px; padding: 2rem; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.9), 0 0 0 1px rgba(0,229,255,0.08) inset; transition: border-color 0.5s;
+            margin: auto 0; flex-shrink: 0;
         }
         .modal-container h2 { font-family: var(--font-display); color: var(--active); margin-top: 0; font-size: 1.3rem; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 1.5rem;}
 
@@ -427,6 +473,17 @@
                 <div class="stat-box"><span class="stat-label">Current Streak</span><span class="stat-value" id="prof-streak" style="color:var(--combo);">0</span></div>
                 <div class="stat-box"><span class="stat-label">Best Streak</span><span class="stat-value" id="prof-best-streak" style="color:var(--combo);">0</span></div>
             </div>
+            <!-- Per-protocol mastery: five independent long curves, plus a
+                 sparkline of recent scores so a player can see whether they are
+                 actually improving on a protocol rather than just accumulating. -->
+            <div style="text-align:left; margin: 1.4rem 0 0.6rem;">
+                <div style="display:flex; align-items:baseline; justify-content:space-between; border-top:1px solid var(--edge); padding-top:12px;">
+                    <span style="font-family:var(--font-mono); font-size:0.62rem; color:var(--text-muted); letter-spacing:1.5px;">PROTOCOL MASTERY</span>
+                    <span id="prof-mastery-total" style="font-family:var(--font-mono); font-size:0.62rem; color:var(--active); letter-spacing:1px;"></span>
+                </div>
+            </div>
+            <div id="prof-mastery-list" style="text-align:left; margin-bottom:1.2rem;"></div>
+
             <button id="reduced-motion-btn" class="btn-small" style="margin-bottom: 10px;">Motion: Full</button>
             <button id="replay-intro-btn" class="btn-small" style="margin-bottom: 10px; color: var(--text-muted); border-color: rgba(255,255,255,0.12);">Replay Intro</button>
             <button id="close-profile-btn" class="btn-small">Close</button>
@@ -594,6 +651,27 @@
                 font-family:var(--font-mono); font-size:1rem; font-weight:700;
                 color:var(--correct); margin-bottom:0.75rem; letter-spacing:1px;">✦ NEW PERSONAL BEST</div>
             <div id="streak-line" style="
+                display:none;
+                font-family:var(--font-mono); font-size:1rem; font-weight:700;
+                color:var(--combo); margin-bottom:0.75rem; letter-spacing:1px;"></div>
+
+            <!-- Per-protocol mastery: points earned this run and progress toward
+                 the next rank. This is the run's contribution to the long-arc
+                 progression, distinct from the one-off Signal payout above. -->
+            <div id="mastery-panel" style="display:none; margin-top:0.5rem; margin-bottom:0.5rem; text-align:left;">
+                <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px;">
+                    <span id="mastery-protocol" style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-muted); letter-spacing:1px;"></span>
+                    <span id="mastery-rank" style="font-family:var(--font-display); font-size:0.8rem; font-weight:800; color:var(--active); letter-spacing:1.5px;"></span>
+                </div>
+                <div style="height:6px; border-radius:3px; background:rgba(255,255,255,0.07); overflow:hidden;">
+                    <div id="mastery-bar" role="progressbar" aria-label="Mastery progress to next rank"
+                         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+                         style="height:100%; width:0%; background:var(--active); transition:width 0.6s ease;"></div>
+                </div>
+                <div id="mastery-detail" style="font-family:var(--font-mono); font-size:0.66rem; color:var(--text-muted); margin-top:5px; letter-spacing:0.5px;"></div>
+            </div>
+
+            <div id="mastery-rankup-line" style="
                 display:none;
                 font-family:var(--font-mono); font-size:1rem; font-weight:700;
                 color:var(--combo); margin-bottom:0.75rem; letter-spacing:1px;"></div>

@@ -30,6 +30,10 @@ src/
   input.ts           — pointer/touch handlers, raycasting
   errorBoundary.ts   — window.onerror, unhandledrejection, showFatalError()
   reducedMotion.ts   — prefers-reduced-motion media query + in-game override
+  progression.ts     — per-protocol mastery ranks, sparklines, Stats rendering
+  streaks.ts         — daily-challenge streak tracking (the only streak source of truth)
+  audioUnlocks.ts    — purchasable audio layers (spatial pan, binaural, gamma)
+  lib/supabase.ts    — lazily dynamic-imported Supabase client (own bundle chunk)
   utils.ts           — delay() helper
   render/
     scene.ts         — Three.js scene, camera, renderer, bloom (EffectComposer), spawnParticles()
@@ -41,7 +45,8 @@ src/
   ui/
     hud.ts           — HUD element updates (score, timer, combo)
     menu.ts          — main menu button listeners, Forge (color picker), store
-    modals.ts        — pause/resume/results modal listeners, registerShowResultsScreen()
+    modals.ts        — pause/resume/results listeners, pauseGame(), registerShowResultsScreen()
+    leaderboard.ts   — board rendering, name prompt, report control, browser screen
 ```
 
 ### Circular dependency breaks
@@ -51,6 +56,25 @@ Two patterns are used where a clean import graph isn't possible:
 1. **`setThemeChangeCallback()`** in `save.ts` — `applyTheme` needs to update Three.js objects that don't exist until `initScene` runs. `main.ts` registers the callback after `initScene` succeeds.
 
 2. **`registerShowResultsScreen()`** in `game/runLoop.ts` — `gameOver()` needs to call `showResultsScreen()` from `ui/modals.ts`, but that would create a cycle. `modals.ts` registers itself by calling `registerShowResultsScreen(showResultsScreen)` at module load time.
+
+### Progression (`src/progression.ts`)
+
+- Per-protocol mastery is **additive only** — it records completed runs and derives a rank. It must
+  never gate content or feed back into run scoring, or the two systems start fighting.
+- `RANK_THRESHOLDS[0]` is `1`, not `0`, so an unplayed protocol reads rank 0 = "Unranked". Setting it
+  to 0 makes every untouched protocol score rank I.
+- Adding a field to `ProtocolMastery` means bumping `SCHEMA_VERSION` **and** backfilling it in
+  `getMastery()` — a partial object from an older build otherwise throws into `load()`'s catch,
+  which resets the whole profile.
+
+### Moderation (`supabase/schema.sql`)
+
+- The client blocklist in `game/leaderboard.ts` is a UX fast-path only. Anything that must actually
+  hold belongs in the SECURITY DEFINER functions — the client bundle is editable by the player.
+- Blocklist terms have a `match_mode`: `substring` for unambiguous slurs, `word` for anything that
+  occurs inside ordinary words. Adding a short term as `substring` is how you block Scunthorpe.
+- Schema changes should be verified against a real Postgres, not eyeballed. A local instance
+  (`initdb` + `pg_ctl`, roles `anon`/`authenticated`) applies `schema.sql` end to end.
 
 ### Save system
 

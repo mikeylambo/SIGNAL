@@ -124,19 +124,24 @@ test('tapping every pattern tile in the tutorial completes the round', async ({ 
     getState: () => { pattern: number[] };
     getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
   };
-  const { pattern, positions } = await page.evaluate(() => {
-    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
-    if (!sig) return { pattern: [], positions: [] };
-    const pattern = sig.getState().pattern;
-    return { pattern, positions: pattern.map(idx => sig.getCubeScreenPos(idx)) };
-  });
+  const pattern = await page.evaluate(
+    () => (window as Window & { __signal?: SignalHandle }).__signal?.getState().pattern ?? [],
+  );
 
   expect(pattern.length).toBeGreaterThan(0);
-  for (const pos of positions) {
+  for (const idx of pattern) {
+    // Recompute immediately before each tap rather than projecting all tiles
+    // up front. Moving the mouse drives the board's parallax drift, so the very
+    // act of clicking the first tile shifts the rest — pre-computed coordinates
+    // for later tiles go stale and the taps land on empty space.
+    const pos = await page.evaluate(
+      (i: number) => (window as Window & { __signal?: SignalHandle }).__signal?.getCubeScreenPos(i) ?? null,
+      idx,
+    );
     expect(pos).not.toBeNull();
     if (pos) {
       await page.mouse.click(pos.x, pos.y);
-      await page.waitForTimeout(150);
+      await page.waitForTimeout(200);
     }
   }
 

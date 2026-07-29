@@ -7,6 +7,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added — content and progression
+- **2-Back honours all three pacings.** It previously overrode pacing entirely: "2-Back + Zen"
+  advertised "No timer. Streak-based." and then ended the run on the first mistake, and
+  "2-Back + Sprint" could not even be selected — the menu bounced it back to Classic. Zen now
+  restarts the stream on a mistake with level walk-back, Sprint runs the 60s clock with a −3s
+  penalty, Classic keeps permadeath. The stress bar is hidden for Classic/Zen 2-Back, where it
+  previously sat full and motionless because nothing drove it. 2-Back also rejoins the daily
+  rotation. This turns "5 protocols × 3 pacings" from a claim into a fact.
+- **Per-protocol mastery ranks** (`src/progression.ts`, schema v12). Each protocol carries its own
+  rank I–X earned through cumulative mastery points, so there is always a next rank on something
+  after the economy tops out. The results screen shows points earned and progress to the next rank;
+  Stats shows all five protocols with progress bars and a sparkline of recent scores, normalised
+  per protocol so a Sprint curve and a Zen curve are both readable. Purely additive: it records
+  what happened and derives a rank, it does not gate content or change run scoring.
+
+### Added — moderation
+- **Server-side display-name moderation** (`supabase/schema.sql`). The client blocklist ships in the
+  bundle and can be edited out, so the authoritative check now runs inside the SECURITY DEFINER
+  write path. Includes leet/spacer normalisation (`n1gg3r`, `f.u.c.k`, `Ｆｕｃｋ` all fold), and a
+  two-mode blocklist: unambiguous slurs match as substrings, while terms that occur inside ordinary
+  words match whole-word only — so Scunthorpe, Assassin, Dickinson and Cockburn are not blocked.
+- **Player reports and bans.** `report_player()` RPC (owner-verified, deduped per reporter), a
+  `moderation_queue` view ordered by report count, a `banned_players` table whose trigger purges the
+  offender's existing rows immediately, and a ⚑ control on every leaderboard row but your own.
+- The whole schema was validated against a live PostgreSQL 16 instance, including evasion cases,
+  false positives, ban purging, and forged-reporter rejection.
+
+### Changed — performance and delivery
+- **Fonts are self-hosted.** The Google Fonts `<link>` was a render-blocking third-party request on
+  every launch; the game fell back to system fonts offline and every player hit Google before the
+  first frame. The same three families now ship as variable fonts (latin subset) — 105 KB total for
+  every weight, from our own origin. Also collapses 13 weight requests into 3 files.
+- **Bundle split.** Was one 805 KB / 205.8 KB gzip chunk. Now: game code 24.0 KB gzip, Three.js
+  128.9 KB gzip (own chunk — needed at first paint since it renders the menu background, so this
+  buys cache lifetime across deploys rather than TTI), and Supabase 55.3 KB gzip **fully deferred**
+  until the first leaderboard read or write. Launch payload is 150.8 KB gzip, down 27%.
+
+### Fixed
+- **Modals could not be scrolled.** `.modal-screen` centred its content with no overflow handling,
+  so any modal taller than the viewport was clipped at both ends with no way to reach either — on a
+  short screen the Close button on Stats or Results was simply unreachable. Now scrolls, still
+  centred when it fits, with safe-area padding.
+- **Tutorial timer demo could appear hung.** Step 5 drained the bar with 61 chained `setTimeout`s;
+  under CPU contention those stretch badly and a 3s animation could take 15s+. Replaced with a
+  single CSS transition — smoother and one timer instead of 61.
+- **Zen level-down could shrink the pattern below the floor** while the grid kept growing, making
+  later levels easier than earlier ones.
+
 ### Fixed — run lifecycle
 - **Run clock billed the player for time no frame rendered**: `runTimer()` subtracted the raw
   `requestAnimationFrame` inter-frame delta. rAF timestamps track wall-clock even across gaps where

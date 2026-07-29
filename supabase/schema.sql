@@ -156,6 +156,16 @@ begin
     raise exception 'display_name exceeds 32 characters';
   end if;
 
+  -- Moderation (see the Moderation section at the end of this file). These two
+  -- checks are the authoritative ones — the client's blocked-word list ships in
+  -- the bundle and can simply be edited out.
+  if exists (select 1 from banned_players where player_id = p_player_id) then
+    raise exception 'player is banned';
+  end if;
+  if is_name_blocked(p_display_name) then
+    raise exception 'display_name contains disallowed content';
+  end if;
+
   -- score: non-negative, below anti-cheat ceiling
   if p_score < 0 then
     raise exception 'score must be >= 0';
@@ -215,6 +225,12 @@ begin
   if length(p_display_name) > 32 then
     raise exception 'display_name exceeds 32 characters';
   end if;
+  if exists (select 1 from banned_players where player_id = p_player_id) then
+    raise exception 'player is banned';
+  end if;
+  if is_name_blocked(p_display_name) then
+    raise exception 'display_name contains disallowed content';
+  end if;
 
   update leaderboard_scores
   set display_name = trim(p_display_name)
@@ -224,3 +240,214 @@ $$;
 
 grant execute on function update_display_name to anon;
 grant execute on function update_display_name to authenticated;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Moderation
+-- ═══════════════════════════════════════════════════════════════════════════
+-- The client carries a blocked-word list, but it is a UX fast-path only: it
+-- lives in the shipped bundle, so anyone can edit it out and post whatever they
+-- like. Display names are user-generated content shown to every other player,
+-- which app-store review treats as a compliance requirement, so the
+-- authoritative check has to run here, inside the SECURITY DEFINER functions
+-- that are the only write path to the table.
+
+-- ── Blocklist ────────────────────────────────────────────────────────────────
+-- A table rather than a hardcoded array so terms can be added in response to a
+-- report without shipping a new client build or redefining a function.
+create table if not exists moderation_blocklist (
+  pattern    text primary key,
+  match_mode text not null default 'substring'
+             check (match_mode in ('substring', 'word')),
+  added_at   timestamptz not null default now(),
+  note       text
+);
+-- Idempotent for clusters created before match_mode existed.
+alter table moderation_blocklist
+  add column if not exists match_mode text not null default 'substring';
+alter table moderation_blocklist enable row level security;
+-- No anon policies: readable and writable only by the service role / SQL editor.
+
+-- 'substring': unambiguous — no ordinary word contains these.
+insert into moderation_blocklist (pattern, match_mode) values
+  ('fuck', 'substring'), ('shit', 'substring'), ('nigger', 'substring'),
+  ('nigga', 'substring'), ('faggot', 'substring'), ('retard', 'substring'),
+  ('pussy', 'substring'), ('bitch', 'substring'), ('tranny', 'substring'),
+  ('hitler', 'substring'), ('kike', 'substring')
+on conflict (pattern) do nothing;
+
+-- 'word': these appear inside perfectly ordinary words (Scunthorpe, Assassin,
+-- Dickinson, Cockburn, Grapes, Nazism-free placenames, Gookin), so they only
+-- match standing alone.
+insert into moderation_blocklist (pattern, match_mode) values
+  ('cunt', 'word'), ('ass', 'word'), ('dick', 'word'), ('cock', 'word'),
+  ('fag', 'word'), ('spic', 'word'), ('gook', 'word'), ('chink', 'word'),
+  ('rape', 'word'), ('nazi', 'word')
+on conflict (pattern) do nothing;
+
+-- ── Normalisation ────────────────────────────────────────────────────────────
+-- Folds common evasions before matching. Without this, 'n1gg3r', 'f.u.c.k' and
+-- 'Ｆｕｃｋ' all sail past a naive substring check.
+--
+-- Two forms are produced, because they answer different questions:
+--   * stripped  — every non-letter removed, so 'f.u.c.k' collapses to 'fuck'.
+--     Used for slurs, which should match however they are padded.
+--   * tokenised — separators collapsed to single spaces, so word boundaries
+--     survive. Used for terms that legitimately occur inside other words;
+--     matching 'cunt' as a substring blocks Scunthorpe, and matching 'ass'
+--     blocks Assassin. That class of false positive locks real players out of
+--     their own name, so those terms match as whole words only.
+--
+-- `p_i_as` disambiguates the digit 1, which stands in for both 'i' (n1gg3r) and
+-- 'l' (h1tler). Callers test both foldings rather than guessing.
+create or replace function fold_leet(p_name text, p_i_as text default 'i')
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select translate(
+    lower(coalesce(p_name, '')),
+    '013457８@$!|' ||
+      'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ',
+    'o' || p_i_as || 'east' || 'b' || 'a' || 's' || 'i' || p_i_as ||
+      'abcdefghijklmnopqrstuvwxyz'
+  );
+$$;
+
+create or replace function normalize_display_name(p_name text, p_i_as text default 'i')
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select regexp_replace(fold_leet(p_name, p_i_as), '[^a-z]', '', 'g');
+$$;
+
+create or replace function tokenize_display_name(p_name text, p_i_as text default 'i')
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  -- Leading/trailing spaces are kept so a ' word ' pattern match works at the
+  -- string edges as well as the middle.
+  select ' ' || btrim(regexp_replace(fold_leet(p_name, p_i_as), '[^a-z]+', ' ', 'g')) || ' ';
+$$;
+
+create or replace function is_name_blocked(p_name text)
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from moderation_blocklist b,
+         -- Both readings of the digit 1; a hit under either is a hit.
+         (values ('i'), ('l')) as v(i_as)
+    where (b.match_mode = 'substring'
+             and normalize_display_name(p_name, v.i_as) like '%' || b.pattern || '%')
+       or (b.match_mode = 'word'
+             and tokenize_display_name(p_name, v.i_as) like '% ' || b.pattern || ' %')
+  );
+$$;
+
+-- ── Bans ─────────────────────────────────────────────────────────────────────
+-- Set by a moderator after reviewing the report queue. A banned player's writes
+-- are rejected; their existing rows are removed by the ban trigger below so the
+-- offending name stops being served immediately rather than at their next write.
+create table if not exists banned_players (
+  player_id  uuid primary key,
+  reason     text,
+  banned_at  timestamptz not null default now()
+);
+alter table banned_players enable row level security;
+
+create or replace function purge_banned_player_scores()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from leaderboard_scores where player_id = new.player_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists banned_players_purge on banned_players;
+create trigger banned_players_purge
+  after insert on banned_players
+  for each row execute function purge_banned_player_scores();
+
+-- ── Player reports ───────────────────────────────────────────────────────────
+-- Lets players flag a name. Reporting is rate-limited by a unique constraint:
+-- one report per reporter per reported player, so a brigade cannot inflate the
+-- count and an individual cannot spam the queue.
+create table if not exists player_reports (
+  id                  bigint generated always as identity primary key,
+  reported_player_id  uuid not null,
+  reporter_player_id  uuid not null,
+  reported_name       text not null,
+  created_at          timestamptz not null default now(),
+  resolved            boolean not null default false,
+  unique (reported_player_id, reporter_player_id)
+);
+alter table player_reports enable row level security;
+
+create index if not exists player_reports_open_idx
+  on player_reports (reported_player_id) where not resolved;
+
+create or replace function report_player(
+  p_reported_player_id uuid,
+  p_reporter_player_id uuid,
+  p_owner_secret       uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_name text;
+begin
+  -- Reporters must prove who they are, or one actor could manufacture
+  -- unlimited distinct "reporters" and bury a player in the queue.
+  perform verify_or_claim_owner(p_reporter_player_id, p_owner_secret);
+
+  if p_reported_player_id = p_reporter_player_id then
+    raise exception 'cannot report yourself';
+  end if;
+
+  select display_name into v_name
+  from leaderboard_scores
+  where player_id = p_reported_player_id
+  limit 1;
+
+  if v_name is null then
+    raise exception 'no such player on any board';
+  end if;
+
+  insert into player_reports (reported_player_id, reporter_player_id, reported_name)
+  values (p_reported_player_id, p_reporter_player_id, v_name)
+  on conflict (reported_player_id, reporter_player_id) do nothing;
+end;
+$$;
+
+grant execute on function report_player to anon;
+grant execute on function report_player to authenticated;
+
+-- ── Moderation queue ─────────────────────────────────────────────────────────
+-- What a moderator actually looks at: open reports grouped by player, most
+-- reported first. Not exposed to anon.
+create or replace view moderation_queue as
+  select
+    r.reported_player_id,
+    max(r.reported_name)                       as reported_name,
+    count(*)                                   as report_count,
+    min(r.created_at)                          as first_reported_at,
+    bool_or(is_name_blocked(r.reported_name))  as matches_blocklist
+  from player_reports r
+  where not r.resolved
+  group by r.reported_player_id
+  order by count(*) desc;
