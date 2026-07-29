@@ -7,6 +7,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed — Forge
+- **The Forge is now "pick a designed base, rotate its hue"** instead of five independent RGB
+  sliders across five colour roles. The old control let a player reach thousands of states that
+  looked nothing like the game, and guarded exactly one pair (base vs background) for contrast.
+  Eight hand-tuned bases ship; a uniform hue rotation preserves the hue *distances* between active,
+  correct and wrong, so no reachable palette can make them collide. The contrast check now covers
+  every pair that matters for play, not just one.
+- The Forge remembers the controls that produced a slot (`customPaletteMeta`, schema v13), so
+  reopening it restores the base and rotation rather than showing defaults over colours the player
+  can no longer edit coherently. Pre-existing hand-mixed palettes are left untouched and keep working.
+
+### Added — accessibility
+- **Settings → Accessibility**, a new tab. Colour-vision palettes moved out of the Forge, because
+  burying access support inside a cosmetic screen puts it where the players who need it are least
+  likely to look. Adds tritanopia alongside deuteranopia and protanopia — the first two get a
+  blue/orange success axis, tritanopia gets red/cyan, since blue/orange is exactly what it cannot
+  separate. The setting is re-applied at startup, not only when Settings is opened.
+- **The board is playable with the keyboard** (`src/keyboard.ts`). It was a WebGL canvas marked
+  aria-hidden, so the game was unplayable without a pointer and opaque to assistive tech. Arrow
+  keys/WASD move a cursor, Enter/Space selects, and activation routes through the same
+  `handleInteraction()` the pointer uses, so protocol rules can't drift between input methods.
+- **Screen-reader announcements** for tile positions, pattern flashes, decoys and phase changes via
+  an aria-live region — the pattern a player has to memorise was previously conveyed only in colour.
+- A keyboard controls reference in Settings → Accessibility.
+
 ### Added — content and progression
 - **2-Back honours all three pacings.** It previously overrode pacing entirely: "2-Back + Zen"
   advertised "No timer. Streak-based." and then ended the run on the first mistake, and

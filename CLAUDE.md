@@ -57,6 +57,28 @@ Two patterns are used where a clean import graph isn't possible:
 
 2. **`registerShowResultsScreen()`** in `game/runLoop.ts` — `gameOver()` needs to call `showResultsScreen()` from `ui/modals.ts`, but that would create a cycle. `modals.ts` registers itself by calling `registerShowResultsScreen(showResultsScreen)` at module load time.
 
+### Forge / palettes (`src/palettes.ts`)
+
+- The Forge is **curated base + uniform hue rotation**, not free colour choice. Uniform rotation
+  preserves the hue *distances* between active/correct/wrong, so no reachable palette can make them
+  collide — that property is why rotation replaced five independent RGB sliders.
+- Colour-vision palettes live in Settings → Accessibility, **not** in the Forge. They are an access
+  need, not a cosmetic, and belong where players who need them will look.
+- `profile.accessiblePalette` overrides the stored calibration and must be re-applied at startup
+  (`initAccessiblePalette()` in `main.ts`), or it persists but silently does nothing until Settings
+  is next opened.
+- Open question for the economy pass: free bases + a full hue slider structurally undercut the paid
+  shop themes. The shop needs to sell something rotation cannot produce, or stop selling colour.
+
+### Keyboard / screen reader (`src/keyboard.ts`)
+
+- Activation routes through `handleInteraction()` — the same entry point as a pointer tap — so every
+  protocol rule applies without being reimplemented. Never add a second "tile was chosen" path.
+- The cursor writes to `userData.targetScale`, the same channel mouse hover uses, so the two cannot
+  fight over the highlight.
+- Flashes and phases are mirrored to `#sr-board-announce`. Any new visual-only game signal needs an
+  announcement, or it doesn't exist for a screen-reader player.
+
 ### Progression (`src/progression.ts`)
 
 - Per-protocol mastery is **additive only** — it records completed runs and derives a rank. It must

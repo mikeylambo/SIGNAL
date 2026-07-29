@@ -2,7 +2,7 @@ import { initScene, adjustCameraForViewport, scene, pLight, gridFloor, camera, r
 import { startRenderLoop, stopRenderLoop, isLoopRunning } from './render/loop';
 import { state } from './state';
 import { applyTheme, currentThemeKey, t, setThemeChangeCallback, profile, saveProfile } from './save';
-import { updateMenuText, setupMenuListeners } from './ui/menu';
+import { updateMenuText, setupMenuListeners, initAccessiblePalette } from './ui/menu';
 import { setupModalListeners, returnToMenu, pauseGame } from './ui/modals';
 import { setupLeaderboardBrowser } from './ui/leaderboard';
 import { onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchMove, onWindowResize } from './input';
@@ -10,6 +10,7 @@ import { cubes, setCubeState, createBoard } from './render/board';
 import type { CubeUserData } from './types';
 import { initErrorBoundary, showFatalError } from './errorBoundary';
 import { startOnboardingRound } from './game/runLoop';
+import { setupKeyboard } from './keyboard';
 import * as THREE from 'three';
 
 initErrorBoundary();
@@ -97,11 +98,17 @@ window.addEventListener('load', () => {
   // Re-apply now that scene is ready so Three.js objects get the correct initial colors
   applyTheme(currentThemeKey);
 
+  // A saved colour-vision palette overrides the stored calibration. Applied
+  // here rather than only when Settings opens, or the setting would persist but
+  // silently not take effect until the player went looking for it.
+  initAccessiblePalette();
+
   createBoard();
   startRenderLoop();
   setupMenuListeners();
   setupModalListeners();
   setupLeaderboardBrowser();
+  setupKeyboard();
 
   // Measure menu sheet height → CSS var so controls-hint sits just above it.
   function updateMenuSheetHeight(): void {

@@ -249,6 +249,13 @@
         .stat-label { font-family: var(--font-display); font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
         .stat-value { font-family: var(--font-mono); font-size: 1.7rem; font-weight: 700; color: var(--active); }
 
+        .forge-swatch-label { font-family: var(--font-mono); font-size: 0.55rem; color: var(--text-muted); text-align: center; margin-top: 3px; letter-spacing: 0.5px; }
+        .forge-base-btn { background: none; border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; padding: 0; overflow: hidden; cursor: pointer; width: auto; }
+        .forge-base-btn[aria-pressed="true"] { border-color: var(--active); box-shadow: 0 0 0 1px var(--active); }
+        .forge-base-swatch { display: flex; height: 22px; }
+        .forge-base-swatch > span { flex: 1; }
+        .forge-base-name { font-family: var(--font-mono); font-size: 0.55rem; color: var(--text-muted); padding: 3px 0; letter-spacing: 0.5px; }
+
         .store-item { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.5); padding: 15px; border-radius: 4px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.08); }
         .store-item-info { text-align: left; }
         .store-item-title { font-family: var(--font-display); font-weight: 700; color: var(--text); font-size: 1rem; letter-spacing: 0.5px; }
@@ -312,6 +319,10 @@
     <div id="screen-flash" aria-hidden="true"></div>
     <!-- Screen-reader-only live region for score announcements -->
     <div id="sr-score-announce" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div>
+    <!-- Board state for screen readers. The canvas is aria-hidden and cannot be
+         made meaningful to assistive tech directly, so tile positions, flashes
+         and phase changes are mirrored here. See src/keyboard.ts. -->
+    <div id="sr-board-announce" aria-live="assertive" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div>
 
     <div id="countdown-overlay" aria-live="assertive" aria-atomic="true">3</div>
 
@@ -499,6 +510,7 @@
             <div style="display: flex; gap: 6px; margin-bottom: 16px;">
                 <button id="settings-tab-audio" class="btn-small settings-tab settings-tab-active" style="flex: 1;">Audio</button>
                 <button id="settings-tab-visual" class="btn-small settings-tab" style="flex: 1;">Visual</button>
+                <button id="settings-tab-access" class="btn-small settings-tab" style="flex: 1;">Access</button>
             </div>
 
             <!-- Audio tab -->
@@ -517,74 +529,77 @@
                 </div>
             </div>
 
-            <!-- Visual tab (all existing Forge content) -->
+            <!-- Visual tab — the Forge.
+                 Was five independent RGB sliders across five colour roles, which
+                 let a player reach thousands of states that looked nothing like
+                 the game and guarded only one pair for contrast. Now: pick a
+                 hand-designed base, rotate its hue. Every reachable palette is a
+                 rotation of a designed one, so the hue distances that make
+                 active/correct/wrong tellable apart survive by construction. -->
             <div id="settings-content-visual" style="display: none;">
                 <!-- Custom palette slot selector -->
-                <div style="margin-bottom: 14px;">
-                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">CUSTOM PALETTE SLOT</div>
+                <div style="margin-bottom: 14px; text-align: left;">
+                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">SLOT</div>
                     <div style="display: flex; gap: 6px;">
-                        <button class="btn-small custom-slot-btn" data-slot="custom1" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Custom 1</button>
-                        <button class="btn-small custom-slot-btn" data-slot="custom2" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Custom 2</button>
-                        <button class="btn-small custom-slot-btn" data-slot="custom3" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Custom 3</button>
-                    </div>
-                </div>
-                <!-- Colorblind-safe presets — one-tap starting points to customize from -->
-                <div style="margin-bottom: 14px;">
-                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">PRESETS</div>
-                    <div style="display: flex; gap: 8px;">
-                        <button id="preset-deuteranopia-btn" class="btn-small" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Deuteranopia</button>
-                        <button id="preset-protanopia-btn" class="btn-small" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">Protanopia</button>
-                        <button id="preset-reset-btn" class="btn-small" style="flex: 1; font-size: 0.7rem; padding: 10px 6px; color: var(--text-muted); border-color: rgba(255,255,255,0.1);">Reset</button>
+                        <button class="btn-small custom-slot-btn" data-slot="custom1" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">1</button>
+                        <button class="btn-small custom-slot-btn" data-slot="custom2" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">2</button>
+                        <button class="btn-small custom-slot-btn" data-slot="custom3" style="flex: 1; font-size: 0.7rem; padding: 10px 6px;">3</button>
                     </div>
                 </div>
 
-                <!-- Color slot selector -->
-                <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">EDITING SLOT</div>
-                <div id="forge-slot-tabs" style="display: flex; gap: 5px; margin-bottom: 14px;">
-                    <button class="forge-slot-tab btn-small" data-slot="base"    style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">Base</button>
-                    <button class="forge-slot-tab btn-small" data-slot="active"  style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">Active</button>
-                    <button class="forge-slot-tab btn-small" data-slot="correct" style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">Correct</button>
-                    <button class="forge-slot-tab btn-small" data-slot="wrong"   style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">Wrong</button>
-                    <button class="forge-slot-tab btn-small" data-slot="bg"      style="flex: 1; padding: 8px 2px; font-size: 0.62rem;">BG</button>
+                <!-- Curated base picker — populated from CURATED_PALETTES -->
+                <div style="text-align: left; margin-bottom: 14px;">
+                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">BASE</div>
+                    <div id="forge-base-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;"></div>
                 </div>
 
-                <!-- RGB sliders for the selected slot -->
-                <div style="display: flex; flex-direction: column; gap: 12px; text-align: left; margin-bottom: 12px;">
-                    <div>
-                        <div class="forge-label" style="color: #F87171;"><span>Red</span><span id="r-val">0</span></div>
-                        <input type="range" id="r-slider" min="0" max="255" value="0">
-                    </div>
-                    <div>
-                        <div class="forge-label" style="color: #4ADE80;"><span>Green</span><span id="g-val">229</span></div>
-                        <input type="range" id="g-slider" min="0" max="255" value="229">
-                    </div>
-                    <div>
-                        <div class="forge-label" style="color: #60A5FA;"><span>Blue</span><span id="b-val">255</span></div>
-                        <input type="range" id="b-slider" min="0" max="255" value="255">
-                    </div>
+                <!-- Single hue control -->
+                <div style="margin-bottom: 14px; text-align: left;">
+                    <div class="forge-label" style="color: var(--text-muted); margin-bottom: 6px; letter-spacing: 1px; font-size: 0.72rem;"><span>HUE SHIFT</span><span id="forge-hue-val">0°</span></div>
+                    <input type="range" id="forge-hue-slider" min="0" max="359" value="0" aria-label="Hue shift in degrees">
                 </div>
 
-                <!-- Large swatch for the slot being edited -->
-                <div id="forge-preview" style="width: 100%; height: 40px; border-radius: 3px; margin-bottom: 12px; border: 2px solid rgba(255,255,255,0.25); transition: background-color 0.08s;"></div>
-
-                <!-- Full-palette strip: all 5 slots at a glance -->
-                <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 1px;">PALETTE PREVIEW</div>
-                <div style="display: flex; gap: 3px; height: 28px; border-radius: 3px; overflow: hidden; margin-bottom: 12px;">
-                    <div id="forge-prev-bg"      style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
-                    <div id="forge-prev-base"    style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
-                    <div id="forge-prev-active"  style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
-                    <div id="forge-prev-correct" style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
-                    <div id="forge-prev-wrong"   style="flex: 1; border: 1px solid rgba(255,255,255,0.15);"></div>
+                <!-- Live preview: the five roles, labelled -->
+                <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 1px; text-align: left;">PREVIEW</div>
+                <div style="display: flex; gap: 4px; margin-bottom: 6px;">
+                    <div style="flex:1;"><div id="forge-prev-bg"      style="height: 34px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.15);"></div><div class="forge-swatch-label">BG</div></div>
+                    <div style="flex:1;"><div id="forge-prev-base"    style="height: 34px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.15);"></div><div class="forge-swatch-label">Tile</div></div>
+                    <div style="flex:1;"><div id="forge-prev-active"  style="height: 34px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.15);"></div><div class="forge-swatch-label">Active</div></div>
+                    <div style="flex:1;"><div id="forge-prev-correct" style="height: 34px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.15);"></div><div class="forge-swatch-label">Correct</div></div>
+                    <div style="flex:1;"><div id="forge-prev-wrong"   style="height: 34px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.15);"></div><div class="forge-swatch-label">Wrong</div></div>
                 </div>
 
-                <!-- Contrast warning — shown when base and bg are too similar -->
-                <div id="forge-contrast-warning" style="display: none; padding: 8px 12px; border-radius: 3px; background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.45); color: #FFB800; font-family: var(--font-mono); font-size: 0.75rem; margin-bottom: 12px; text-align: left;">
-                    &#9888; Base and BG are too similar — cubes may be hard to see.
-                </div>
+                <!-- Contrast warning — now checks every pair that matters for play -->
+                <div id="forge-contrast-warning" role="status" style="display: none; padding: 8px 12px; border-radius: 3px; background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.45); color: #FFB800; font-family: var(--font-mono); font-size: 0.75rem; margin: 10px 0; text-align: left;"></div>
 
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 10px; margin-top: 14px;">
                     <button id="apply-forge-btn" style="background: var(--active); color: #001016; border-color: #fff; font-weight: 800;">Save &amp; Apply</button>
                     <button id="close-forge-btn-visual" class="btn-small">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Accessibility tab — promoted out of the Forge. Colour-vision
+                 support is an access need, and burying it inside a cosmetic
+                 customisation screen put it where the players who need it are
+                 least likely to look. -->
+            <div id="settings-content-access" style="display: none;">
+                <div style="text-align: left; margin-bottom: 6px;">
+                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; letter-spacing: 1px;">COLOUR VISION</div>
+                    <div style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 10px;">
+                        Replaces the red/green success axis, which is the axis most
+                        colour-vision deficiencies compress. Overrides your calibration.
+                    </div>
+                    <div id="access-palette-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                </div>
+
+                <div style="text-align: left; margin-top: 18px; border-top: 1px solid var(--edge); padding-top: 14px;">
+                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 1px;">MOTION &amp; INPUT</div>
+                    <button id="reduced-motion-btn-access" class="btn-small" style="margin-bottom: 10px; width: 100%;">Motion: Full</button>
+                    <button id="keyboard-help-btn" class="btn-small" style="margin-bottom: 10px; width: 100%;">Keyboard controls</button>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 14px;">
+                    <button id="close-forge-btn-access" class="btn-small" style="flex: 1;">Close</button>
                 </div>
             </div>
         </div>

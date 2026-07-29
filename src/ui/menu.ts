@@ -3,14 +3,19 @@ import { PROTOCOLS, PACINGS } from '../game/protocols';
 import { getSignal, spendSignal, themes, currentThemeKey, applyTheme, profile, saveProfile, lightenHex } from '../save';
 import { getStreakDisplay } from '../streaks';
 import type { CustomPalette } from '../types';
+import {
+  CURATED_PALETTES, ACCESSIBLE_PALETTES, findCurated, rotatePalette, paletteWarning,
+} from '../palettes';
 import { playTone, initAudio, haptic, setMasterVolume } from '../audio';
 import { AUDIO_UNLOCKS, isAudioUnlocked, buyAudioUnlock, isAudioFeatureEnabled, setAudioFeatureEnabled } from '../audioUnlocks';
 import { renderStatsBar } from './hud';
 import { returnToMenu, updateReducedMotionText, pauseGame } from './modals';
+import { toggleReducedMotion } from '../reducedMotion';
 import { initGame, startOnboardingRound } from '../game/runLoop';
 import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
 import { setDisplayName } from '../game/leaderboard';
 import { renderMasteryList } from '../progression';
+import { showKeyboardHelp } from '../keyboard';
 
 export function updateMenuText(): void {
   const pMode = PROTOCOLS[state.curProtIdx];
@@ -191,83 +196,80 @@ function buyTheme(key: string, price: number): void {
   }
 }
 
-// ── Forge helpers ─────────────────────────────────────────────────────────────
+// ── Forge ─────────────────────────────────────────────────────────────────────
+// Curated base + hue rotation. See src/palettes.ts for why this replaced five
+// independent RGB sliders.
 
-// Colorblind-safe presets the player can select then further customize.
-// Deuteranopia and protanopia both struggle with red/green contrast, so
-// these palettes replace that axis with blue/orange, which remains distinct
-// under the most common forms of color-vision deficiency.
-const MONO_DEFAULT: CustomPalette = { bg: '#05080D', base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864' };
+let draftBaseId = 'mono';
+let draftHue = 0;
 
-const PRESETS: Record<string, CustomPalette> = {
-  deuteranopia: { bg: '#05080D', base: '#1A2A38', active: '#FFD60A', correct: '#3FA7FF', wrong: '#FF7800' },
-  protanopia:   { bg: '#05080D', base: '#1F2D3B', active: '#E8F5FF', correct: '#5BC4FF', wrong: '#FF8C42' },
-};
-
-type PaletteSlot = keyof CustomPalette;
-let draftPalette: CustomPalette = { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' };
-let selectedSlot: PaletteSlot = 'active';
-
-function relativeLuminance(hex: string): number {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const toLinear = (c: number) => { const s = c / 255; return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
-  return 0.2126 * toLinear((n >> 16) & 0xff) + 0.7152 * toLinear((n >> 8) & 0xff) + 0.0722 * toLinear(n & 0xff);
+function draftPalette(): CustomPalette {
+  const base = findCurated(draftBaseId) ?? CURATED_PALETTES[0];
+  return rotatePalette(base.palette, draftHue);
 }
 
-function contrastRatio(a: string, b: string): number {
-  const l1 = relativeLuminance(a), l2 = relativeLuminance(b);
-  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-}
+/** Builds the base picker once; each button previews the palette it selects. */
+function buildBaseGrid(): void {
+  const grid = document.getElementById('forge-base-grid');
+  if (!grid || grid.childElementCount > 0) return;
 
-function hexFromSliders(): string {
-  const r = parseInt((document.getElementById('r-slider') as HTMLInputElement).value);
-  const g = parseInt((document.getElementById('g-slider') as HTMLInputElement).value);
-  const b = parseInt((document.getElementById('b-slider') as HTMLInputElement).value);
-  return '#' + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1).toUpperCase();
-}
-
-function loadSlotIntoSliders(hex: string): void {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
-  (document.getElementById('r-slider') as HTMLInputElement).value = String(r);
-  (document.getElementById('g-slider') as HTMLInputElement).value = String(g);
-  (document.getElementById('b-slider') as HTMLInputElement).value = String(b);
-  document.getElementById('r-val')!.innerText = String(r);
-  document.getElementById('g-val')!.innerText = String(g);
-  document.getElementById('b-val')!.innerText = String(b);
+  CURATED_PALETTES.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'forge-base-btn';
+    btn.type = 'button';
+    btn.dataset['base'] = c.id;
+    btn.setAttribute('aria-pressed', 'false');
+    btn.setAttribute('aria-label', `${c.name} palette`);
+    // Swatch shows the three roles a player actually distinguishes in play.
+    btn.innerHTML =
+      `<span class="forge-base-swatch">` +
+      `<span style="background:${c.palette.active}"></span>` +
+      `<span style="background:${c.palette.correct}"></span>` +
+      `<span style="background:${c.palette.wrong}"></span>` +
+      `</span><div class="forge-base-name">${c.name}</div>`;
+    btn.addEventListener('click', () => {
+      draftBaseId = c.id;
+      refreshForgeUI();
+    });
+    grid.appendChild(btn);
+  });
 }
 
 function refreshForgeUI(): void {
-  // Tab highlights
-  document.querySelectorAll<HTMLButtonElement>('.forge-slot-tab').forEach(btn => {
-    const active = btn.dataset['slot'] === selectedSlot;
-    btn.style.borderColor = active ? 'var(--active)' : 'rgba(255,255,255,0.14)';
-    btn.style.color = active ? 'var(--active)' : '';
+  const p = draftPalette();
+
+  document.querySelectorAll<HTMLButtonElement>('.forge-base-btn').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(btn.dataset['base'] === draftBaseId));
   });
-  // Large swatch for the selected slot
-  const hex = draftPalette[selectedSlot];
-  const preview = document.getElementById('forge-preview')!;
-  preview.style.backgroundColor = hex;
-  preview.style.boxShadow = selectedSlot !== 'bg' ? `0 0 14px ${hex}` : 'none';
-  // Full palette strip
-  (document.getElementById('forge-prev-bg')      as HTMLElement).style.backgroundColor = draftPalette.bg;
-  (document.getElementById('forge-prev-base')    as HTMLElement).style.backgroundColor = draftPalette.base;
-  (document.getElementById('forge-prev-active')  as HTMLElement).style.backgroundColor = draftPalette.active;
-  (document.getElementById('forge-prev-correct') as HTMLElement).style.backgroundColor = draftPalette.correct;
-  (document.getElementById('forge-prev-wrong')   as HTMLElement).style.backgroundColor = draftPalette.wrong;
-  // Contrast warning: base cubes vs background (WCAG-adjacent threshold of 2:1)
+
+  const hueSlider = document.getElementById('forge-hue-slider') as HTMLInputElement | null;
+  if (hueSlider) hueSlider.value = String(draftHue);
+  const hueVal = document.getElementById('forge-hue-val');
+  if (hueVal) hueVal.textContent = `${draftHue}°`;
+
+  (document.getElementById('forge-prev-bg')      as HTMLElement).style.backgroundColor = p.bg;
+  (document.getElementById('forge-prev-base')    as HTMLElement).style.backgroundColor = p.base;
+  (document.getElementById('forge-prev-active')  as HTMLElement).style.backgroundColor = p.active;
+  (document.getElementById('forge-prev-correct') as HTMLElement).style.backgroundColor = p.correct;
+  (document.getElementById('forge-prev-wrong')   as HTMLElement).style.backgroundColor = p.wrong;
+
+  // Checks every pair that matters for play, not just base-vs-bg as before.
   const warning = document.getElementById('forge-contrast-warning')!;
-  warning.style.display = contrastRatio(draftPalette.base, draftPalette.bg) < 2.0 ? 'block' : 'none';
+  const problem = paletteWarning(p);
+  warning.style.display = problem ? 'block' : 'none';
+  if (problem) warning.textContent = `\u26A0 ${problem}`;
+
+  updateCustomSlotUI();
 }
 
 function openForge(): void {
+  buildBaseGrid();
   const slot = profile.activeCustomSlot ?? 'custom1';
-  const slotPalette = profile.customPalettes?.[slot] ?? profile.customPalette;
-  draftPalette = { ...slotPalette };
-  selectedSlot = 'active';
-  loadSlotIntoSliders(draftPalette[selectedSlot]);
+  const meta = profile.customPaletteMeta?.[slot];
+  draftBaseId = meta?.baseId ?? 'mono';
+  draftHue = meta?.hue ?? 0;
+  if (!findCurated(draftBaseId)) draftBaseId = 'mono';
   refreshForgeUI();
-  updateCustomSlotUI();
 }
 
 function updateCustomSlotUI(): void {
@@ -281,25 +283,108 @@ function updateCustomSlotUI(): void {
 
 function applyForge(): void {
   const slot = profile.activeCustomSlot ?? 'custom1';
-  if (!profile.customPalettes) profile.customPalettes = { custom1: { ...draftPalette }, custom2: { ...draftPalette }, custom3: { ...draftPalette } };
-  profile.customPalettes[slot] = { ...draftPalette };
-  profile.customPalette = { ...draftPalette }; // keep legacy field in sync
-  profile.customHex = draftPalette.active;
+  const p = draftPalette();
+
+  if (!profile.customPalettes) profile.customPalettes = {};
+  if (!profile.customPaletteMeta) profile.customPaletteMeta = {};
+  profile.customPalettes[slot] = { ...p };
+  profile.customPaletteMeta[slot] = { baseId: draftBaseId, hue: draftHue };
+  profile.customPalette = { ...p };   // keep legacy field in sync
+  profile.customHex = p.active;
+  // Choosing a cosmetic palette is an explicit override of the accessibility
+  // one; leaving both set would make the Forge preview lie about what the
+  // player is about to see.
+  profile.accessiblePalette = '';
   saveProfile();
 
-  const h = (hex: string) => parseInt(hex.replace('#', ''), 16);
-  const p = draftPalette;
-  themes.custom.primary    = p.active;
-  themes.custom.bg         = h(p.bg);    themes.custom.bgHex      = p.bg;
-  themes.custom.active     = h(p.active); themes.custom.activeHex  = p.active;
-  themes.custom.correct    = h(p.correct); themes.custom.correctHex = p.correct;
-  themes.custom.wrong      = h(p.wrong);  themes.custom.wrongHex   = p.wrong;
-  themes.custom.base       = h(p.base);   themes.custom.baseHex    = p.base;
-  themes.custom.edge       = lightenHex(p.base, 1.7);
-
+  syncCustomTheme(p);
   applyTheme('custom');
   playTone('buy');
   returnToMenu();
+}
+
+/** Pushes a palette into the live `custom` theme object. */
+function syncCustomTheme(p: CustomPalette): void {
+  const h = (hex: string) => parseInt(hex.replace('#', ''), 16);
+  themes.custom.primary    = p.active;
+  themes.custom.bg         = h(p.bg);      themes.custom.bgHex      = p.bg;
+  themes.custom.active     = h(p.active);  themes.custom.activeHex  = p.active;
+  themes.custom.correct    = h(p.correct); themes.custom.correctHex = p.correct;
+  themes.custom.wrong      = h(p.wrong);   themes.custom.wrongHex   = p.wrong;
+  themes.custom.base       = h(p.base);    themes.custom.baseHex    = p.base;
+  themes.custom.edge       = lightenHex(p.base, 1.7);
+}
+
+// ── Accessibility ─────────────────────────────────────────────────────────────
+// Colour-vision palettes live here rather than in the Forge: they are an access
+// need, not a cosmetic, and the players who need them are the least likely to go
+// looking inside a customisation screen.
+
+function buildAccessList(): void {
+  const list = document.getElementById('access-palette-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  const render = (id: string, name: string, desc: string, swatch: string[] | null) => {
+    const selected = (profile.accessiblePalette ?? '') === id;
+    const btn = document.createElement('button');
+    btn.className = 'btn-small';
+    btn.type = 'button';
+    btn.setAttribute('aria-pressed', String(selected));
+    btn.style.cssText =
+      'width:100%; text-align:left; padding:10px 12px; display:flex; align-items:center; gap:10px;' +
+      `border-color:${selected ? 'var(--active)' : 'rgba(255,255,255,0.14)'};` +
+      `color:${selected ? 'var(--active)' : ''};`;
+    const chips = swatch
+      ? `<span style="display:flex;gap:2px;flex-shrink:0;">${swatch
+          .map(c => `<span style="width:12px;height:12px;border-radius:2px;background:${c};"></span>`)
+          .join('')}</span>`
+      : '<span style="width:38px;flex-shrink:0;"></span>';
+    btn.innerHTML =
+      chips +
+      `<span style="flex:1;"><span style="display:block;font-size:0.74rem;">${name}</span>` +
+      `<span style="display:block;font-size:0.62rem;color:var(--text-muted);margin-top:2px;">${desc}</span></span>` +
+      (selected ? '<span style="flex-shrink:0;">\u2713</span>' : '');
+    btn.addEventListener('click', () => applyAccessiblePalette(id));
+    list.appendChild(btn);
+  };
+
+  render('', 'Off', 'Use your chosen calibration', null);
+  ACCESSIBLE_PALETTES.forEach(a =>
+    render(a.id, a.name, 'Blue/orange success axis', [a.palette.active, a.palette.correct, a.palette.wrong]),
+  );
+}
+
+function applyAccessiblePalette(id: string): void {
+  profile.accessiblePalette = id;
+  saveProfile();
+
+  if (!id) {
+    // Back to whatever calibration was selected before.
+    applyTheme(profile.currentCalibration || 'mono');
+    buildAccessList();
+    return;
+  }
+
+  const preset = ACCESSIBLE_PALETTES.find(a => a.id === id);
+  if (!preset) return;
+  syncCustomTheme(preset.palette);
+  applyTheme('custom');
+  playTone('buy');
+  buildAccessList();
+}
+
+/**
+ * Re-applies the accessibility palette at startup. Without this the setting
+ * would persist but only take effect the next time the player opened Settings.
+ */
+export function initAccessiblePalette(): void {
+  const id = profile.accessiblePalette;
+  if (!id) return;
+  const preset = ACCESSIBLE_PALETTES.find(a => a.id === id);
+  if (!preset) return;
+  syncCustomTheme(preset.palette);
+  applyTheme('custom');
 }
 
 export function setupMenuListeners(): void {
@@ -311,9 +396,6 @@ export function setupMenuListeners(): void {
   const forgeBtn    = document.getElementById('forge-btn')    as HTMLButtonElement;
   const storeBtn    = document.getElementById('store-btn')    as HTMLButtonElement;
   const pauseBtn    = document.getElementById('pause-btn')    as HTMLButtonElement;
-  const rSlider     = document.getElementById('r-slider')     as HTMLInputElement;
-  const gSlider     = document.getElementById('g-slider')     as HTMLInputElement;
-  const bSlider     = document.getElementById('b-slider')     as HTMLInputElement;
 
   protocolBtn.addEventListener('click', () => {
     initAudio();
@@ -412,6 +494,17 @@ export function setupMenuListeners(): void {
   // Settings tab switching
   document.getElementById('settings-tab-audio')!.addEventListener('click', () => switchSettingsTab('audio'));
   document.getElementById('settings-tab-visual')!.addEventListener('click', () => switchSettingsTab('visual'));
+  document.getElementById('settings-tab-access')!.addEventListener('click', () => {
+    switchSettingsTab('access');
+    buildAccessList();
+    updateReducedMotionText();
+  });
+  document.getElementById('close-forge-btn-access')!.addEventListener('click', returnToMenu);
+  document.getElementById('keyboard-help-btn')!.addEventListener('click', showKeyboardHelp);
+  document.getElementById('reduced-motion-btn-access')!.addEventListener('click', () => {
+    toggleReducedMotion();
+    updateReducedMotionText();
+  });
 
   // Volume slider
   const volumeSlider = document.getElementById('volume-slider') as HTMLInputElement;
@@ -426,44 +519,10 @@ export function setupMenuListeners(): void {
     applyForge();
   });
 
-  // Color slot tabs
-  document.querySelectorAll<HTMLButtonElement>('.forge-slot-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      selectedSlot = (btn.dataset['slot'] as PaletteSlot);
-      loadSlotIntoSliders(draftPalette[selectedSlot]);
-      refreshForgeUI();
-    });
-  });
-
-  // RGB sliders — update the current slot and live-preview BG color on body
-  const onSliderInput = () => {
-    draftPalette[selectedSlot] = hexFromSliders();
-    document.getElementById('r-val')!.innerText = (document.getElementById('r-slider') as HTMLInputElement).value;
-    document.getElementById('g-val')!.innerText = (document.getElementById('g-slider') as HTMLInputElement).value;
-    document.getElementById('b-val')!.innerText = (document.getElementById('b-slider') as HTMLInputElement).value;
-    if (selectedSlot === 'bg') {
-      document.documentElement.style.setProperty('--bg', draftPalette.bg);
-    }
-    refreshForgeUI();
-  };
-  rSlider.addEventListener('input', onSliderInput);
-  gSlider.addEventListener('input', onSliderInput);
-  bSlider.addEventListener('input', onSliderInput);
-
-  // Colorblind presets + reset
-  document.getElementById('preset-deuteranopia-btn')!.addEventListener('click', () => {
-    draftPalette = { ...PRESETS['deuteranopia'] };
-    loadSlotIntoSliders(draftPalette[selectedSlot]);
-    refreshForgeUI();
-  });
-  document.getElementById('preset-protanopia-btn')!.addEventListener('click', () => {
-    draftPalette = { ...PRESETS['protanopia'] };
-    loadSlotIntoSliders(draftPalette[selectedSlot]);
-    refreshForgeUI();
-  });
-  document.getElementById('preset-reset-btn')!.addEventListener('click', () => {
-    draftPalette = { ...MONO_DEFAULT };
-    loadSlotIntoSliders(draftPalette[selectedSlot]);
+  // Hue slider — the Forge's only continuous control now
+  const hueSlider = document.getElementById('forge-hue-slider') as HTMLInputElement;
+  hueSlider.addEventListener('input', () => {
+    draftHue = parseInt(hueSlider.value, 10) || 0;
     refreshForgeUI();
   });
 
@@ -529,25 +588,33 @@ export function setupMenuListeners(): void {
       const slot = btn.dataset['slot'] ?? 'custom1';
       profile.activeCustomSlot = slot;
       saveProfile();
-      const slotPalette = profile.customPalettes?.[slot] ?? profile.customPalette;
-      draftPalette = { ...slotPalette };
-      loadSlotIntoSliders(draftPalette[selectedSlot]);
+      // Load that slot's saved Forge controls, not its raw colours — the
+      // controls are what the UI edits now.
+      const meta = profile.customPaletteMeta?.[slot];
+      draftBaseId = findCurated(meta?.baseId ?? '') ? meta!.baseId : 'mono';
+      draftHue = meta?.hue ?? 0;
       refreshForgeUI();
-      updateCustomSlotUI();
     });
   });
 }
 
-function switchSettingsTab(tab: 'audio' | 'visual'): void {
-  const audioContent = document.getElementById('settings-content-audio')!;
-  const visualContent = document.getElementById('settings-content-visual')!;
-  const audioTab = document.getElementById('settings-tab-audio')!;
-  const visualTab = document.getElementById('settings-tab-visual')!;
-  const isAudio = tab === 'audio';
-  audioContent.style.display = isAudio ? '' : 'none';
-  visualContent.style.display = isAudio ? 'none' : '';
-  audioTab.classList.toggle('settings-tab-active', isAudio);
-  visualTab.classList.toggle('settings-tab-active', !isAudio);
+function switchSettingsTab(tab: 'audio' | 'visual' | 'access'): void {
+  const panes: Record<string, string> = {
+    audio:  'settings-content-audio',
+    visual: 'settings-content-visual',
+    access: 'settings-content-access',
+  };
+  const tabs: Record<string, string> = {
+    audio:  'settings-tab-audio',
+    visual: 'settings-tab-visual',
+    access: 'settings-tab-access',
+  };
+  for (const key of Object.keys(panes)) {
+    const pane = document.getElementById(panes[key]);
+    const pill = document.getElementById(tabs[key]);
+    if (pane) pane.style.display = key === tab ? '' : 'none';
+    if (pill) pill.classList.toggle('settings-tab-active', key === tab);
+  }
 }
 
 function initAudioTab(): void {

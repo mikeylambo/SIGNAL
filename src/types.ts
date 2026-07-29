@@ -66,6 +66,23 @@ export interface SavedProfile {
   hasCompletedOnboarding: boolean;
   /** Keyed by protocol id ('spatial', 'sequential', …). See progression.ts. */
   protocolMastery: Record<string, ProtocolMastery>;
+  /**
+   * What the Forge's controls were set to, per custom slot. The resulting
+   * colours live in `customPalettes`; this is what regenerates them, so
+   * reopening the Forge restores the base and hue the player chose rather than
+   * showing defaults over a palette they can no longer edit coherently.
+   */
+  customPaletteMeta: Record<string, ForgeSelection>;
+  /**
+   * Colour-vision palette from Settings → Accessibility, or '' for none.
+   * Separate from the Forge because it is an access need, not a cosmetic.
+   */
+  accessiblePalette: string;
+}
+
+export interface ForgeSelection {
+  baseId: string;   // id from CURATED_PALETTES
+  hue: number;      // degrees of rotation applied to that base, 0-359
 }
 
 export interface Theme {

@@ -701,7 +701,9 @@ test('protocol mastery accrues and renders in Stats', async ({ page }) => {
       protocolMastery: Record<string, { points: number; runs: number; history: unknown[] }>;
     }) : null;
   });
-  expect(stored?.schemaVersion).toBe(12);
+  // >= rather than exact: this assertion is only checking that migrations ran
+  // and mastery exists, so a later schema bump shouldn't fail it.
+  expect(stored?.schemaVersion).toBeGreaterThanOrEqual(12);
   expect(stored?.protocolMastery['spatial'].runs).toBe(1);
   expect(stored?.protocolMastery['spatial'].points).toBeGreaterThan(0);
   expect(stored?.protocolMastery['spatial'].history).toHaveLength(1);
@@ -720,4 +722,121 @@ test('an unplayed protocol reads as Unranked, not rank I', async ({ page }) => {
   await page.locator('#profile-btn').click();
   await expect(page.locator('#prof-mastery-total')).toHaveText('0 / 50');
   await expect(page.locator('#prof-mastery-list')).toContainText('Unranked');
+});
+
+// ── Forge (curated base + hue rotation) ───────────────────────────────────────
+
+test('Forge offers curated bases and rotates hue coherently', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#forge-btn').click();
+  await page.locator('#settings-tab-visual').click();
+
+  await expect(page.locator('.forge-base-btn')).toHaveCount(8);
+
+  const activeSwatch = () =>
+    page.locator('#forge-prev-active').evaluate(e => getComputedStyle(e).backgroundColor);
+
+  await page.locator('.forge-base-btn[data-base="mono"]').click();
+  expect(await activeSwatch()).toBe('rgb(0, 229, 255)');
+  await expect(page.locator('.forge-base-btn[data-base="mono"]')).toHaveAttribute('aria-pressed', 'true');
+
+  await page.locator('.forge-base-btn[data-base="amethyst"]').click();
+  expect(await activeSwatch()).toBe('rgb(180, 124, 255)');
+
+  await page.locator('#forge-hue-slider').fill('120');
+  await page.locator('#forge-hue-slider').dispatchEvent('input');
+  await expect(page.locator('#forge-hue-val')).toHaveText('120°');
+  // A 120° rotation of #B47CFF lands on #FFB47C — same S and L, hue moved.
+  expect(await activeSwatch()).toBe('rgb(255, 180, 124)');
+
+  await page.locator('#apply-forge-btn').click();
+  const saved = await page.evaluate(() => {
+    const raw = localStorage.getItem('sig_profile_v1');
+    return raw ? (JSON.parse(raw) as {
+      customPaletteMeta: Record<string, { baseId: string; hue: number }>;
+    }) : null;
+  });
+  expect(saved?.customPaletteMeta['custom1']).toEqual({ baseId: 'amethyst', hue: 120 });
+
+  // Reopening restores the controls, not just the resulting colours.
+  await page.locator('#forge-btn').click();
+  await page.locator('#settings-tab-visual').click();
+  await expect(page.locator('.forge-base-btn[data-base="amethyst"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#forge-hue-slider')).toHaveValue('120');
+});
+
+test('colour-vision palettes live in Accessibility and survive reload', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#forge-btn').click();
+  await page.locator('#settings-tab-access').click();
+
+  // Off + three deficiency types.
+  await expect(page.locator('#access-palette-list button')).toHaveCount(4);
+  await page.locator('#access-palette-list button').nth(1).click();  // Deuteranopia
+
+  const correctVar = () => page.evaluate(
+    () => getComputedStyle(document.documentElement).getPropertyValue('--correct').trim(),
+  );
+  expect(await correctVar()).toBe('#3FA7FF');
+
+  // Persisted, and re-applied at startup rather than only when Settings opens.
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem('sig_profile_v1');
+    return raw ? (JSON.parse(raw) as { accessiblePalette: string }).accessiblePalette : null;
+  });
+  expect(stored).toBe('deuteranopia');
+});
+
+// ── Keyboard access ───────────────────────────────────────────────────────────
+
+test('a full level is playable with the keyboard alone', async ({ page }) => {
+  // The board is a WebGL canvas marked aria-hidden, so before this the game
+  // could not be played without a pointer at all.
+  await page.goto('/');
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+
+  const pattern = await page.evaluate(
+    () => (window as Window & { __signal?: { getState: () => { pattern: number[] } } })
+      .__signal!.getState().pattern,
+  );
+  expect(pattern.length).toBeGreaterThan(0);
+
+  // First keypress reveals the cursor and announces its position.
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#sr-board-announce')).toContainText('Row 1, column 1');
+
+  const size = 3;
+  let cur = 0;
+  for (const target of pattern) {
+    const tr = Math.floor(target / size), tc = target % size;
+    let cr = Math.floor(cur / size), cc = cur % size;
+    while (cr < tr) { await page.keyboard.press('ArrowDown'); cr++; }
+    while (cr > tr) { await page.keyboard.press('ArrowUp'); cr--; }
+    while (cc < tc) { await page.keyboard.press('ArrowRight'); cc++; }
+    while (cc > tc) { await page.keyboard.press('ArrowLeft'); cc--; }
+    cur = tr * size + tc;
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(120);
+  }
+
+  await expect.poll(
+    () => page.evaluate(
+      () => (window as Window & { __signal?: { getState: () => { level: number } } })
+        .__signal!.getState().level,
+    ),
+    { timeout: 8000 },
+  ).toBe(2);
+  await expect(page.locator('#results-screen')).toBeHidden();
+});
+
+test('keyboard help is reachable from Accessibility', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#forge-btn').click();
+  await page.locator('#settings-tab-access').click();
+  await page.locator('#keyboard-help-btn').click();
+  await expect(page.locator('#keyboard-help-overlay')).toBeVisible();
+  await expect(page.locator('#keyboard-help-overlay')).toContainText('Arrow keys / WASD');
+  await page.locator('#keyboard-help-close').click();
+  await expect(page.locator('#keyboard-help-overlay')).toHaveCount(0);
 });

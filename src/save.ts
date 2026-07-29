@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -48,6 +48,12 @@ const SaveSystem = (() => {
       activeCustomSlot: 'custom1',
       hasCompletedOnboarding: false,
       protocolMastery: {},
+      customPaletteMeta: {
+        custom1: { baseId: 'mono', hue: 0 },
+        custom2: { baseId: 'mono', hue: 0 },
+        custom3: { baseId: 'mono', hue: 0 },
+      },
+      accessiblePalette: '',
     };
   }
 
@@ -136,6 +142,22 @@ const SaveSystem = (() => {
       // any backfill would be invented.
       raw.protocolMastery = {};
       raw.schemaVersion = 12;
+    }
+    if (raw.schemaVersion < 13) {
+      // v12 → v13: the Forge became "curated base + hue rotation", so it needs
+      // to remember which base and rotation produced a slot's colours.
+      // Existing hand-mixed palettes in `customPalettes` are left untouched and
+      // keep working — they just report as 'mono / 0°' until the player next
+      // moves a Forge control, at which point the new controls take over. That
+      // is deliberate: silently re-deriving their colours from the nearest
+      // curated base would change a palette they chose.
+      raw.customPaletteMeta = {
+        custom1: { baseId: 'mono', hue: 0 },
+        custom2: { baseId: 'mono', hue: 0 },
+        custom3: { baseId: 'mono', hue: 0 },
+      };
+      raw.accessiblePalette = '';
+      raw.schemaVersion = 13;
     }
     return raw;
   }

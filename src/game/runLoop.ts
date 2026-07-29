@@ -11,6 +11,7 @@ import { recordActivity, recordDailyCompletion, type DailyStreakResult } from '.
 import { recordProtocolRun, rankNumeral, rankTitle, rankProgress, type MasteryResult } from '../progression';
 import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI, updateStatsUI, renderStatsBar } from '../ui/hud';
 import { delay } from '../utils';
+import { announceFlash, announcePhase, resetKeyboardCursor } from '../keyboard';
 import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
 import { promptDisplayName, showLeaderboardPanel, showLeaderboardSkeleton } from '../ui/leaderboard';
 
@@ -576,6 +577,7 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
 
   state.isPlayable = false;
   state.userClicks = [];
+  resetKeyboardCursor();
   updateStatsUI();
   pauseBtn.style.display = 'none';
 
@@ -607,6 +609,7 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
   }
 
   showMessage('Observe', 'var(--active)');
+  announcePhase('Observe. Watch the pattern.');
   _ob.onObserve?.();
   await delay(300);
   if (isStale(runId)) return;
@@ -624,8 +627,8 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
   };
 
   if (pMode.id === 'interference') {
-    state.pattern.forEach(i => setCubeState(cubes[i], 'active'));
-    state.decoys.forEach(i => setCubeState(cubes[i], 'decoy'));
+    state.pattern.forEach(i => { setCubeState(cubes[i], 'active'); announceFlash(i, 'active'); });
+    state.decoys.forEach(i => { setCubeState(cubes[i], 'decoy'); announceFlash(i, 'decoy'); });
     playTone('active', spatialPan(state.pattern[0] ?? 0)); playTone('decoy');
     await delay(1200 * speedMult);
     if (isStale(runId) || !(await awaitUnpaused())) return;
@@ -634,6 +637,7 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
     for (let i = 0; i < state.pattern.length; i++) {
       if (!(await awaitUnpaused())) return;
       setCubeState(cubes[state.pattern[i]], 'active');
+      announceFlash(state.pattern[i], 'active');
       playTone('active', spatialPan(state.pattern[i]));
       let pause = 200 * speedMult;
       if (pMode.id === 'rhythm') {
@@ -651,6 +655,7 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
 
   if (!(await awaitUnpaused())) return;
   showMessage('Execute', 'var(--text)');
+  announcePhase('Execute. Reproduce the pattern.');
   _ob.onExecute?.();
   state.isPlayable = true;
   state.lastClickTime = 0;
@@ -716,6 +721,7 @@ export async function startNBackLevel(runId: number = state.runId): Promise<void
 
     state.nBackIsFlashing = true;
     setCubeState(cubes[idx], 'active');
+    announceFlash(idx, 'active');
     playTone('active', spatialPan(idx));
 
     const waitTime = Math.max(600, 1200 - (state.level * 50));

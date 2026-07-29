@@ -134,10 +134,17 @@ export function setupModalListeners(): void {
   });
 }
 
+/**
+ * Keeps both motion toggles in sync — the long-standing one on the Stats screen
+ * and the one in Settings → Accessibility. They drive the same setting, so a
+ * change made in one place must not leave the other showing a stale label.
+ */
 export function updateReducedMotionText(): void {
-  const btn = document.getElementById('reduced-motion-btn') as HTMLButtonElement | null;
-  if (!btn) return;
-  btn.innerText = `Motion: ${isReducedMotion() ? 'Reduced' : 'Full'}`;
+  const label = `Motion: ${isReducedMotion() ? 'Reduced' : 'Full'}`;
+  for (const id of ['reduced-motion-btn', 'reduced-motion-btn-access']) {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (btn) btn.innerText = label;
+  }
 }
 
 function updateHapticsToggleText(): void {
