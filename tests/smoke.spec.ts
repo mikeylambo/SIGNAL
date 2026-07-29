@@ -840,3 +840,143 @@ test('keyboard help is reachable from Accessibility', async ({ page }) => {
   await page.locator('#keyboard-help-close').click();
   await expect(page.locator('#keyboard-help-overlay')).toHaveCount(0);
 });
+
+// ── Modifiers ─────────────────────────────────────────────────────────────────
+
+type Mastery = Record<string, { points: number; bestScore: number; bestLevel: number; runs: number; history: unknown[] }>;
+
+/**
+ * Seeds a profile with specific mastery and a chosen modifier.
+ * The values go through addInitScript's argument, not a closure — addInitScript
+ * serialises the function, so captured variables arrive undefined in the page.
+ */
+async function seedModifier(page: Page, mastery: Mastery, modifier: string): Promise<void> {
+  await page.addInitScript((arg: { mastery: Mastery; modifier: string }) => {
+    const m = arg.mastery, mod = arg.modifier;
+    localStorage.setItem('sig_profile_v1', JSON.stringify({
+      schemaVersion: 15, signal: 0, unlockedCalibrations: ['mono', 'custom'], currentCalibration: 'mono',
+      customHex: '#00E5FF',
+      customPalette: { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' },
+      hasSeenOnboarding: true, hasCompletedOnboarding: true, unlockedAudioFeatures: [],
+      player_id: '00000000-0000-0000-0000-000000000001',
+      owner_secret: '00000000-0000-0000-0000-000000000002',
+      display_name: 'TestPlayer', currentStreak: 0, longestStreak: 0,
+      lastRunDate: null, lastActivityDate: null,
+      lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
+      lastDailyDate: null, settings: { haptics: true, sfx: true, volume: 0.7, telemetry: false },
+      protocolMastery: m, customPaletteMeta: {}, accessiblePalette: '', lastModifier: mod,
+    }));
+  }, { mastery, modifier });
+}
+
+const SPATIAL_RANKED: Mastery = { spatial: { points: 700, bestScore: 0, bestLevel: 0, runs: 5, history: [] } };
+const SPATIAL_HIGH: Mastery = { spatial: { points: 2000, bestScore: 0, bestLevel: 0, runs: 9, history: [] } };
+
+test('a locked modifier is shown but never applied', async ({ page }) => {
+  // Locked entries stay selectable so the hint can explain the unlock; the run
+  // itself must fall back to Standard rather than granting it.
+  await seedModifier(page, {}, 'chromatic');
+  await page.goto('/');
+  await expect(page.locator('#modifier-btn')).toContainText('🔒');
+  await expect(page.locator('#hint-message')).toContainText('Locked — reach Spatial rank 3');
+
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('#channel-selector')).toBeHidden();
+  const channels = await page.evaluate(
+    () => (window as Window & { __signal?: { getState: () => { patternChannels: number[] } } })
+      .__signal!.getState().patternChannels,
+  );
+  expect(channels).toEqual([]);
+});
+
+test('Chromatic requires the colour to match, not just the position', async ({ page }) => {
+  await seedModifier(page, SPATIAL_RANKED, 'chromatic');
+  await page.goto('/');
+  await expect(page.locator('#modifier-btn')).toHaveText('Chromatic');
+
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('.channel-chip')).toHaveCount(3);
+
+  const st = await page.evaluate(
+    () => (window as Window & {
+      __signal?: { getState: () => { pattern: number[]; patternChannels: number[] } };
+    }).__signal!.getState(),
+  );
+  expect(st.patternChannels).toHaveLength(st.pattern.length);
+
+  // Right tile, wrong colour — must be treated as a mistake.
+  const wrong = (st.patternChannels[0] + 1) % 3;
+  await page.locator(`.channel-chip[data-channel="${wrong}"]`).click();
+  const pos = await page.evaluate(
+    (i: number) => (window as Window & { __signal?: { getCubeScreenPos: (n: number) => { x: number; y: number } | null } })
+      .__signal!.getCubeScreenPos(i),
+    st.pattern[0],
+  );
+  await page.mouse.click(pos!.x, pos!.y);
+  await expect(page.locator('#end-title')).toHaveText('WRONG COLOUR', { timeout: 8000 });
+});
+
+test('Chromatic applies its score multiplier', async ({ page }) => {
+  await seedModifier(page, SPATIAL_RANKED, 'chromatic');
+  await page.goto('/');
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+
+  const st = await page.evaluate(
+    () => (window as Window & {
+      __signal?: { getState: () => { pattern: number[]; patternChannels: number[] } };
+    }).__signal!.getState(),
+  );
+  await page.locator(`.channel-chip[data-channel="${st.patternChannels[0]}"]`).click();
+  const pos = await page.evaluate(
+    (i: number) => (window as Window & { __signal?: { getCubeScreenPos: (n: number) => { x: number; y: number } | null } })
+      .__signal!.getCubeScreenPos(i),
+    st.pattern[0],
+  );
+  await page.mouse.click(pos!.x, pos!.y);
+
+  // Spatial's base hit is 10 at combo 1; Chromatic's 1.5x makes it 15.
+  await expect.poll(
+    () => page.evaluate(
+      () => (window as Window & { __signal?: { getState: () => { score: number } } })
+        .__signal!.getState().score,
+    ),
+    { timeout: 5000 },
+  ).toBe(15);
+});
+
+test('Resonant never lights a tile', async ({ page }) => {
+  // The modifier's entire premise is that position comes from the stereo field
+  // and colour from pitch, with nothing shown. If a tile ever lit, it would be
+  // strictly easier than Chromatic while scoring more.
+  await seedModifier(page, SPATIAL_HIGH, 'resonant');
+  await page.goto('/');
+  await expect(page.locator('#modifier-btn')).toHaveText('Resonant');
+  await page.locator('#start-btn').click();
+
+  let maxEmissive = 0;
+  for (let i = 0; i < 70; i++) {
+    const m = await page.evaluate(
+      () => (window as Window & { __signal?: { getMaxEmissive: () => number } })
+        .__signal!.getMaxEmissive(),
+    );
+    if (m > maxEmissive) maxEmissive = m;
+    if (await page.locator('#pause-btn').isVisible()) break;
+    await page.waitForTimeout(80);
+  }
+  // Idle tiles sit at 0.12; a lit flash is 1.1.
+  expect(maxEmissive).toBeLessThan(0.5);
+});
+
+test('2-Back offers no modifiers', async ({ page }) => {
+  // Layering a colour channel onto a running 2-back comparison is a materially
+  // different exercise, not a generic modifier.
+  await seedModifier(page, { nback: { points: 5000, bestScore: 0, bestLevel: 0, runs: 20, history: [] } }, 'chromatic');
+  await page.goto('/');
+  for (let i = 0; i < 4; i++) await page.locator('#protocol-btn').click();
+  await expect(page.locator('#protocol-btn')).toHaveText('2-Back');
+  await expect(page.locator('#modifier-btn')).toBeDisabled();
+  await expect(page.locator('#modifier-btn')).toHaveText('—');
+});

@@ -15,6 +15,7 @@ import { initGame, startOnboardingRound } from '../game/runLoop';
 import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
 import { setDisplayName } from '../game/leaderboard';
 import { renderMasteryList } from '../progression';
+import { MODIFIERS, getModifier, isModifierUnlocked, modifiersAvailableFor, setModifier, type ModifierId } from '../game/modifiers';
 import { showKeyboardHelp } from '../keyboard';
 import { isTelemetryEnabled, setTelemetryEnabled } from '../telemetry';
 
@@ -33,8 +34,39 @@ export function updateMenuText(): void {
   protocolBtn.style.color = pMode.id === 'nback' ? 'var(--combo)' : 'var(--text)';
   pacingBtn.textContent = pPace.name;
 
-  // Hint — two lines separated by <br>
-  hintEl.innerHTML = `${pMode.hint}<br>${pPace.hint}`;
+  // Modifier button. Unavailable protocols and locked modifiers are shown
+  // rather than hidden, so the unlock is a visible goal rather than a surprise.
+  const modifierBtn = document.getElementById('modifier-btn') as HTMLButtonElement | null;
+  const available = modifiersAvailableFor(pMode.id);
+  if (modifierBtn) {
+    if (!available) {
+      modifierBtn.textContent = '—';
+      modifierBtn.style.color = 'var(--text-muted)';
+      modifierBtn.style.opacity = '0.5';
+      modifierBtn.disabled = true;
+      modifierBtn.title = 'Modifiers are not available for 2-Back.';
+    } else {
+      const mod = getModifier(state.modifierId);
+      const unlocked = isModifierUnlocked(mod.id, pMode.id);
+      modifierBtn.disabled = false;
+      modifierBtn.style.opacity = '1';
+      modifierBtn.textContent = unlocked ? mod.name : `${mod.name} 🔒`;
+      modifierBtn.style.color = mod.id === 'none'
+        ? 'var(--text)'
+        : unlocked ? 'var(--active)' : 'var(--text-muted)';
+      modifierBtn.title = '';
+    }
+  }
+
+  // Hint — three lines; the modifier line explains the lock when relevant.
+  const mod = getModifier(state.modifierId);
+  let modLine = '';
+  if (available && mod.id !== 'none') {
+    modLine = isModifierUnlocked(mod.id, pMode.id)
+      ? `<br>${mod.hint} ×${mod.scoreMultiplier}`
+      : `<br>Locked — reach ${pMode.name} rank ${mod.requiredRank}`;
+  }
+  hintEl.innerHTML = `${pMode.hint}<br>${pPace.hint}${modLine}`;
 
   // Streak column
   const { count: streakCount, protected: streakProtected } = getStreakDisplay();
@@ -407,6 +439,18 @@ export function setupMenuListeners(): void {
   pacingBtn.addEventListener('click', () => {
     initAudio();
     state.curPaceIdx = (state.curPaceIdx + 1) % PACINGS.length;
+    updateMenuText();
+  });
+
+  // Modifier cycling. Locked entries are still selectable so the hint can
+  // explain what unlocks them; activeModifier() falls back to Standard at run
+  // start, so choosing a locked one can never actually apply it.
+  const modifierBtn = document.getElementById('modifier-btn') as HTMLButtonElement;
+  modifierBtn.addEventListener('click', () => {
+    initAudio();
+    const idx = MODIFIERS.findIndex(m => m.id === state.modifierId);
+    const next = MODIFIERS[(idx + 1) % MODIFIERS.length];
+    setModifier(next.id as ModifierId);
     updateMenuText();
   });
 

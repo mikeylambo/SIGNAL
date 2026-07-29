@@ -1,6 +1,7 @@
 import { state } from './state';
 import { cubes } from './render/board';
-import { handleInteraction } from './game/runLoop';
+import { handleInteraction, selectChannel } from './game/runLoop';
+import { activeModifier, CHROMATIC_CHANNELS } from './game/modifiers';
 import { PROTOCOLS } from './game/protocols';
 
 /**
@@ -96,8 +97,13 @@ export function setupKeyboard(): void {
       key === 'w' || key === 'a' || key === 's' || key === 'd' ||
       key === 'W' || key === 'A' || key === 'S' || key === 'D';
     const isActivate = key === 'Enter' || key === ' ';
+    // 1-3 arm a Chromatic channel, so a keyboard player can supply the colour
+    // half of a modified answer without reaching for the pointer.
+    const channelKey = /^[1-9]$/.test(key) ? parseInt(key, 10) - 1 : -1;
+    const isChannel = channelKey >= 0 && channelKey < CHROMATIC_CHANNELS.length
+      && activeModifier().id !== 'none';
 
-    if (!isMove && !isActivate) return;
+    if (!isMove && !isActivate && !isChannel) return;
     // Only claim these keys during play. Outside a run they belong to the
     // browser and to normal button focus.
     if (!state.isPlayable || state.isPaused) return;
@@ -110,6 +116,8 @@ export function setupKeyboard(): void {
       announce(`Keyboard control active. ${describe(cursor)}`);
       if (isMove) return;   // first press just reveals the cursor
     }
+
+    if (isChannel) { selectChannel(channelKey); return; }
 
     switch (key) {
       case 'ArrowUp': case 'w': case 'W':    moveCursor(-1, 0); break;

@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -54,6 +54,7 @@ const SaveSystem = (() => {
         custom3: { baseId: 'mono', hue: 0 },
       },
       accessiblePalette: '',
+      lastModifier: 'none',
     };
   }
 
@@ -165,6 +166,12 @@ const SaveSystem = (() => {
       // a build that hasn't opted in to collecting anything.
       if (raw.settings.telemetry === undefined) raw.settings.telemetry = true;
       raw.schemaVersion = 14;
+    }
+    if (raw.schemaVersion < 15) {
+      // v14 → v15: run modifiers. Everyone starts on Standard; the others are
+      // gated on per-protocol mastery rank and so unlock through play.
+      raw.lastModifier = 'none';
+      raw.schemaVersion = 15;
     }
     return raw;
   }

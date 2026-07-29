@@ -35,6 +35,16 @@ export function makeRimMaterial(opts: THREE.MeshStandardMaterialParameters): THR
   return mat;
 }
 
+/**
+ * Chromatic override. When set, a cube's 'active' flash uses this colour
+ * instead of the theme's, because under the Chromatic modifier the flash colour
+ * is information the player must remember, not decoration. Cleared back to null
+ * the moment the flash ends so nothing else in the game is tinted.
+ */
+export function setCubeChannelTint(cube: THREE.Mesh, hexNum: number | null): void {
+  cube.userData['channelTint'] = hexNum;
+}
+
 export function setCubeState(cube: THREE.Mesh, cubeState: CubeState): void {
   cube.userData['state'] = cubeState;
   const mat = cube.material as THREE.MeshStandardMaterial;
@@ -48,9 +58,14 @@ export function setCubeState(cube: THREE.Mesh, cubeState: CubeState): void {
     case 'base':
       mat.emissive.setHex(t.active); mat.emissiveIntensity = 0.12; edge.color.setHex(t.edge);
       rim.rimColor.value.setHex(t.active); rim.rimIntensity.value = 0.35; break;
-    case 'active':
-      mat.emissive.setHex(t.active); mat.emissiveIntensity = 1.1; edge.color.setHex(0xffffff);
-      rim.rimColor.value.setHex(t.active); rim.rimIntensity.value = 1.1; break;
+    case 'active': {
+      // Chromatic's channel colour takes precedence over the theme here — see
+      // setCubeChannelTint. Everything else about the flash is unchanged.
+      const tint = cube.userData['channelTint'] as number | null | undefined;
+      const activeCol = (tint ?? t.active) as number;
+      mat.emissive.setHex(activeCol); mat.emissiveIntensity = 1.1; edge.color.setHex(0xffffff);
+      rim.rimColor.value.setHex(activeCol); rim.rimIntensity.value = 1.1; break;
+    }
     case 'correct':
       mat.emissive.setHex(t.correct); mat.emissiveIntensity = 1.6; edge.color.setHex(0xffffff);
       rim.rimColor.value.setHex(t.correct); rim.rimIntensity.value = 1.4; break;

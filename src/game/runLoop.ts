@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { state, endRun } from '../state';
 import { PROTOCOLS, PACINGS } from './protocols';
-import { cubes, setCubeState, createBoard } from '../render/board';
+import { cubes, setCubeState, setCubeChannelTint, createBoard } from '../render/board';
 import { camera, spawnParticles, adjustCameraForViewport } from '../render/scene';
 import { loopState, cameraShake, flashScreen, resetPivotRotation } from '../render/loop';
-import { playTone, haptic, initAudio } from '../audio';
+import { playTone, playChannelTone, haptic, initAudio } from '../audio';
 import { startGameplayAudio, stopGameplayAudio, spatialPan } from '../audioUnlocks';
 import { addSignal, recordRun, t, profile, saveProfile } from '../save';
 import { recordActivity, recordDailyCompletion, type DailyStreakResult } from '../streaks';
@@ -13,6 +13,7 @@ import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI,
 import { delay } from '../utils';
 import { announceFlash, announcePhase, resetKeyboardCursor } from '../keyboard';
 import { track } from '../telemetry';
+import { activeModifier, assignChromaticChannels, channelFor, modifierBoardSuffix, CHROMATIC_CHANNELS } from './modifiers';
 import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
 import { promptDisplayName, showLeaderboardPanel, showLeaderboardSkeleton } from '../ui/leaderboard';
 
@@ -599,11 +600,20 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
   if (isStale(runId)) return;
 
   state.pattern = []; state.decoys = []; state.rhythmDelays = [];
+  state.patternChannels = []; state.clickChannels = []; state.selectedChannel = 0;
   const totalTiles = state.gridSize * state.gridSize;
   while (state.pattern.length < state.activeCount) {
     const r = Math.floor(Math.random() * totalTiles);
     if (!state.pattern.includes(r)) state.pattern.push(r);
   }
+
+  // Modifiers layer a second channel onto the same pattern rather than
+  // replacing it, so everything above is untouched by which modifier is active.
+  const mod = activeModifier();
+  if (mod.id !== 'none') {
+    state.patternChannels = assignChromaticChannels(state.pattern);
+  }
+  renderChannelSelector();
 
   if (pMode.id === 'interference') {
     let decoyCount = Math.floor(state.activeCount * 0.7) || 1;
@@ -642,9 +652,22 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
   } else {
     for (let i = 0; i < state.pattern.length; i++) {
       if (!(await awaitUnpaused())) return;
-      setCubeState(cubes[state.pattern[i]], 'active');
-      announceFlash(state.pattern[i], 'active');
-      playTone('active', spatialPan(state.pattern[i]));
+      const flashIdx = state.pattern[i];
+      const channel = mod.id === 'none' ? null : channelFor(state.patternChannels[i] ?? 0);
+
+      if (mod.id === 'resonant') {
+        // Resonant deliberately shows nothing: position comes from the stereo
+        // field and colour from pitch, so the tile itself never lights.
+        playChannelTone(channel!.semitone, spatialPan(flashIdx));
+        playTone('active', spatialPan(flashIdx));
+        announceFlash(flashIdx, 'active');
+      } else {
+        if (channel) setCubeChannelTint(cubes[flashIdx], channel.num);
+        setCubeState(cubes[flashIdx], 'active');
+        announceFlash(flashIdx, 'active');
+        if (channel) playChannelTone(channel.semitone, spatialPan(flashIdx));
+        else playTone('active', spatialPan(flashIdx));
+      }
       let pause = 200 * speedMult;
       if (pMode.id === 'rhythm') {
         const options = [200, 400, 600];
@@ -653,7 +676,10 @@ export async function startLevel(runId: number = state.runId): Promise<void> {
       }
       await delay(pause);
       if (isStale(runId)) return;
-      setCubeState(cubes[state.pattern[i]], 'base');
+      // Clear the tint before returning to base so no idle tile keeps a
+      // channel colour after its flash.
+      setCubeChannelTint(cubes[flashIdx], null);
+      setCubeState(cubes[flashIdx], 'base');
       await delay(150 * speedMult);
       if (isStale(runId)) return;
     }
@@ -771,6 +797,65 @@ function restartNBackStream(runId: number, delayMs: number): void {
   }, delayMs);
 }
 
+/**
+ * Builds (or hides) the colour selector for the active modifier.
+ *
+ * Arming a colour and then tapping a tile keeps a tap to one gesture. The
+ * alternative — tap tile, then pick colour — doubles every interaction in a
+ * game whose Classic mode is on a countdown.
+ */
+export function renderChannelSelector(): void {
+  const el = document.getElementById('channel-selector');
+  if (!el) return;
+  const mod = activeModifier();
+
+  if (mod.id === 'none') {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+
+  el.style.display = 'flex';
+  el.innerHTML = '';
+  CHROMATIC_CHANNELS.forEach(ch => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'channel-chip';
+    btn.dataset['channel'] = String(ch.id);
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', String(state.selectedChannel === ch.id));
+    btn.setAttribute('aria-label', `${ch.name}, key ${ch.id + 1}`);
+    btn.style.cssText =
+      `width:auto;margin:0;padding:0;border-radius:4px;cursor:pointer;` +
+      `width:38px;height:26px;background:${ch.hex};` +
+      `border:2px solid ${state.selectedChannel === ch.id ? '#fff' : 'rgba(255,255,255,0.2)'};` +
+      `box-shadow:${state.selectedChannel === ch.id ? `0 0 12px ${ch.hex}` : 'none'};`;
+    btn.addEventListener('click', () => selectChannel(ch.id));
+    el.appendChild(btn);
+  });
+}
+
+export function selectChannel(id: number): void {
+  state.selectedChannel = id;
+  renderChannelSelector();
+  const ch = channelFor(id);
+  playChannelTone(ch.semitone);
+  announcePhase(`${ch.name} selected`);
+}
+
+/**
+ * The channel the pattern expects for a given board index. Spatial and
+ * Interference accept any order, so the expected colour is whichever slot that
+ * tile occupies in the pattern; ordered protocols use the current step.
+ */
+function expectedChannelFor(boardIndex: number): number {
+  const pMode = PROTOCOLS[state.curProtIdx];
+  const patternPos = (pMode.id === 'sequential' || pMode.id === 'rhythm')
+    ? state.userClicks.length
+    : state.pattern.indexOf(boardIndex);
+  return state.patternChannels[patternPos] ?? 0;
+}
+
 export function handleInteraction(cube: THREE.Mesh): void {
   if (!state.isPlayable || state.isPaused) return;
   initAudio(); // ensure AudioContext exists; safe no-op if already initialised
@@ -795,6 +880,16 @@ export function handleInteraction(cube: THREE.Mesh): void {
     if (state.pattern.includes(index)) isCorrect = true;
   }
 
+  // Under a modifier the tile must match on colour too. Checked after position
+  // so a wrong-position tap still reports as a wrong tile rather than a wrong
+  // colour, which would be misleading.
+  if (isCorrect && activeModifier().id !== 'none') {
+    if (state.selectedChannel !== expectedChannelFor(index)) {
+      handleMistake(cube, 'WRONG COLOUR');
+      return;
+    }
+  }
+
   if (isCorrect) {
     if (pMode.id === 'rhythm' && state.userClicks.length > 0) {
       const timeDelta = Date.now() - state.lastClickTime;
@@ -802,6 +897,7 @@ export function handleInteraction(cube: THREE.Mesh): void {
       if (Math.abs(timeDelta - expectedDelta) > 400) { handleMistake(cube, 'OFF RHYTHM'); return; }
     }
     state.userClicks.push(index);
+    state.clickChannels.push(state.selectedChannel);
     state.lastClickTime = Date.now();
     processHit(cube, pMode.id === 'spatial' ? 1 : 1.5);
 
@@ -822,7 +918,7 @@ export function processHit(cube: THREE.Mesh, multiplier: number): void {
   state.combo++;
   if (state.combo > state.maxCombo) state.maxCombo = state.combo;
   const comboMult = Math.min(4, 1 + Math.floor(state.combo / 4) * 0.5);
-  const gained = Math.floor(10 * comboMult * multiplier);
+  const gained = Math.floor(10 * comboMult * multiplier * activeModifier().scoreMultiplier);
 
   state.timeLeft = Math.min(state.totalTime, state.timeLeft + 400);
   state.score += gained;
@@ -969,6 +1065,9 @@ export async function levelComplete(): Promise<void> {
 }
 
 export function gameOver(reasonText: string): void {
+  const selectorEl = document.getElementById('channel-selector');
+  if (selectorEl) selectorEl.style.display = 'none';
+
   const pPace = PACINGS[state.curPaceIdx];
   const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
   const endTitle = document.getElementById('end-title')!;
@@ -1145,9 +1244,11 @@ export async function showResultsScreen(): Promise<void> {
   nudgeEl.style.display = 'block';
 
   // Build the board key for this run
+  // Modified runs get their own boards. A 1.8x Resonant score on the standard
+  // board would make the standard board unwinnable without the modifier.
   const boardKey = state.isDailyRun
     ? dailyBoardKey(new Date().toISOString().split('T')[0])
-    : modeBoardKey(pMode.id, pPace.id);
+    : modeBoardKey(pMode.id, pPace.id) + modifierBoardSuffix();
 
   let isNewBest = false;
 

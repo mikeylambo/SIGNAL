@@ -357,6 +357,10 @@
                     <button id="pause-btn" class="icon-btn" style="display:none; pointer-events:auto;" aria-label="Pause">||</button>
                 </div>
             </div>
+            <!-- Chromatic channel selector. Shown only under a modifier: the
+                 player arms a colour, then taps the tile, so a tap carries both
+                 position and colour without needing a two-step interaction. -->
+            <div id="channel-selector" style="display:none; justify-content:center; gap:8px; padding:8px 0; pointer-events:auto;" role="radiogroup" aria-label="Colour channel"></div>
             <div id="stress-bar-container" style="display:none;" aria-hidden="true">
                 <div id="stress-bar" role="progressbar" aria-label="Time remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"></div>
             </div>
@@ -407,6 +411,11 @@
                 <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;">
                     <div style="font-family:var(--font-mono);font-size:0.62rem;
                         color:var(--text-muted);letter-spacing:1.5px;">PACING</div>
+                    <button id="modifier-btn" style="
+                        flex: 1; margin: 0; padding: 14px 6px;
+                        background: none; border: 1px solid var(--edge); border-radius: 4px;
+                        font-family: var(--font-display); font-size: 0.82rem; font-weight: 700;
+                        letter-spacing: 1px; color: var(--text); cursor: pointer;">Standard</button>
                     <button id="pacing-btn" style="
                         background:none; border:none; padding:0; margin:0; width:auto;
                         font-family:var(--font-mono); font-size:0.78rem; font-weight:700;

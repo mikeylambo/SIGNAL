@@ -79,6 +79,23 @@ Two patterns are used where a clean import graph isn't possible:
 - Flashes and phases are mirrored to `#sr-board-announce`. Any new visual-only game signal needs an
   announcement, or it doesn't exist for a screen-reader player.
 
+### Modifiers (`src/game/modifiers.ts`)
+
+- Modifiers are **properties of existing protocols**, never new protocols. Chromatic failed as a
+  sixth protocol for two structural reasons: it fought the Forge (a colour-memory task built on
+  player-recolourable materials is unstable), and it tested perception while everything else tests
+  memory. As a modifier it adds a channel to a memory task instead.
+- **Chromatic's channel colours are fixed and theme-exempt.** They are gameplay information, so the
+  Forge must never be able to rotate them into each other. Never derive them from `t`.
+- Each channel also carries a semitone, so colour is audible as well as visible. That is what makes
+  Resonant possible and keeps Chromatic playable without colour vision.
+- Modified runs get their own leaderboards (`modifierBoardSuffix()`). Mixing a 1.8x score into the
+  standard board would make the standard board unwinnable without the modifier.
+- Unlocks are gated per protocol, not globally — Chromatic on Spatial is a different skill from
+  Chromatic on Rhythm.
+- 2-Back is excluded by `modifiersAvailableFor()`; a second channel on a running 2-back comparison
+  is a materially harder exercise that needs its own design pass.
+
 ### Progression (`src/progression.ts`)
 
 - Per-protocol mastery is **additive only** — it records completed runs and derives a rank. It must

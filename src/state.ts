@@ -44,6 +44,14 @@ export const state = {
   // after the replacement has already set nBackActive back to true and both run
   // at once, double-flashing tiles and double-counting clicks.
   nBackStreamId: 0,
+  /** Modifier selected in the menu. See game/modifiers.ts. */
+  modifierId: 'none' as 'none' | 'chromatic' | 'resonant',
+  /** Colour channel per pattern entry, parallel to `pattern`. Chromatic only. */
+  patternChannels: [] as number[],
+  /** Channels the player has chosen this round, parallel to `userClicks`. */
+  clickChannels: [] as number[],
+  /** Channel currently armed by the colour selector during Execute. */
+  selectedChannel: 0,
 };
 
 /** Invalidates the current run so any in-flight async gameplay step aborts. */

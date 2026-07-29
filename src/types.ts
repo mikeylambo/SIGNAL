@@ -80,6 +80,8 @@ export interface SavedProfile {
    * Separate from the Forge because it is an access need, not a cosmetic.
    */
   accessiblePalette: string;
+  /** Last modifier chosen in the menu, restored on launch. */
+  lastModifier: string;
 }
 
 export interface ForgeSelection {

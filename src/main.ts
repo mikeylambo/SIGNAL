@@ -68,6 +68,10 @@ window.addEventListener('load', () => {
 
   const container = document.getElementById('canvas-container')!;
 
+  // Restore the last modifier before the first menu render, so the button
+  // doesn't briefly show Standard and then change.
+  state.modifierId = (profile.lastModifier ?? 'none') as typeof state.modifierId;
+
   updateMenuText();
   applyTheme(currentThemeKey);
 
@@ -176,6 +180,11 @@ window.addEventListener('load', () => {
   (window as Window & { __signal?: unknown }).__signal = {
     isLoopRunning,
     getState: () => state,
+    // Brightest tile on the board. Exists so a test can assert that the
+    // Resonant modifier never lights one — the whole point of that modifier is
+    // that nothing is shown, which is otherwise unobservable from outside.
+    getMaxEmissive: (): number =>
+      cubes.reduce((m, c) => Math.max(m, (c.material as THREE.MeshStandardMaterial).emissiveIntensity), 0),
     // Projects a cube's world position to viewport coordinates so Playwright
     // tests can click tiles accurately without approximating geometry.
     getCubeScreenPos: (idx: number): { x: number; y: number } | null => {

@@ -154,6 +154,37 @@ function voice(
 // pan: stereo position -1 (left) to +1 (right), default 0 (center).
 // Used by audioUnlocks.ts spatial feature to position sounds by cube column.
 
+/**
+ * Plays the Chromatic channel tone. Pitch encodes the colour, which is what
+ * makes the Resonant modifier playable at all (no tile lights up) and gives
+ * Chromatic a non-visual channel for colour-blind and screen-reader players.
+ */
+export function playChannelTone(semitone: number, pan = 0): void {
+  if (!audioCtx || !profile.settings.sfx) return;
+  const ctx = audioCtx;
+  const now = ctx.currentTime;
+  const freq = 440 * Math.pow(2, semitone / 12);
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, now);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.09, now + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+
+  const clampedPan = Math.max(-1, Math.min(1, pan));
+  if (clampedPan !== 0 && typeof ctx.createStereoPanner === 'function') {
+    const panner = ctx.createStereoPanner();
+    panner.pan.setValueAtTime(clampedPan, now);
+    osc.connect(panner); panner.connect(gain);
+  } else {
+    osc.connect(gain);
+  }
+  gain.connect(sfxBus ?? ctx.destination);
+  osc.start(now); osc.stop(now + 0.45);
+}
+
 export function playTone(type: string, pan = 0): void {
   if (!audioCtx) return;
   // The SFX toggle previously wrote to the profile and updated its own label

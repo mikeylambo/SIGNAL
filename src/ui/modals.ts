@@ -55,6 +55,7 @@ export function returnToMenu(): void {
   (document.getElementById('controls-hint') as HTMLElement).style.display = 'block';
 
   (document.getElementById('canvas-container') as HTMLElement).style.filter = 'none';
+  (document.getElementById('channel-selector') as HTMLElement).style.display = 'none';
 
   // Sheet is visible again with its real height — recompute the camera offset so
   // the grid re-centers above it instead of keeping gameplay's centered framing.

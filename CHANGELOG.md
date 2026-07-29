@@ -7,6 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added — modifiers
+- **A modifier axis** (`src/game/modifiers.ts`): properties applied to existing protocols rather
+  than new protocols. Two modifiers across four grid protocols is eight new experiences from a small
+  amount of new surface, which is the opposite trade from adding a sixth protocol silo.
+- **Chromatic** — tiles flash in one of three channels and you must reproduce colour as well as
+  position. Its channel colours are **fixed and theme-exempt**: they are information, not
+  decoration, so the Forge cannot rotate two channels into each other. This is why the earlier
+  standalone Chromatic protocol didn't work — it fought the theming system and tested perception
+  where every other protocol tests memory. Score ×1.5.
+- **Resonant** — the same colour channel, but nothing is shown at all: position comes from the
+  stereo field and colour from pitch. Score ×1.8. Verified that no tile ever lights during a
+  Resonant run.
+- Each channel carries a semitone as well as a hex, so colour is audible as well as visible — which
+  is what makes Resonant possible and keeps Chromatic playable without colour vision. Channels are
+  chosen on a blue/amber/white triad that avoids the red-green axis and varies in lightness, so they
+  stay separable under colour-vision deficiency and in greyscale.
+- Modifiers unlock through **per-protocol mastery rank** (Chromatic at 3, Resonant at 5), giving the
+  mastery system something to pay out and the currency-free economy a real progression hook. Locked
+  modifiers are shown with the unlock requirement rather than hidden, and can never be applied to a
+  run even if selected.
+- Modified runs post to their own leaderboards — a ×1.8 score on the standard board would make the
+  standard board unwinnable without the modifier.
+- Keyboard players arm a channel with 1–3, so a modified run is fully playable without a pointer.
+- 2-Back is excluded: layering a second channel onto a running 2-back comparison is a materially
+  different (and much harder) exercise that deserves its own design pass.
+
 ### Added — observability
 - **Anonymous telemetry** (`src/telemetry.ts`), replacing the `TODO` in `errorBoundary.ts`. Crash
   rate, WebGL init failures, and run start/end were previously unobservable in the field — "check
