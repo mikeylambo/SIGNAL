@@ -80,16 +80,10 @@ export function updateStatsUI(): void {
   if (clearsEl) clearsEl.textContent = String(state.clears);
 }
 
-export function updateHapticsToggleText(): void {
-  const supported = !!navigator.vibrate;
-  const btn = document.getElementById('haptics-toggle-btn') as HTMLButtonElement | null;
-  if (!btn) return;
-  // profile is imported lazily via save to avoid circular deps
-  const profile = (window as unknown as { __signalProfile?: { settings: { haptics: boolean } } }).__signalProfile;
-  const hapticOn = profile?.settings.haptics ?? true;
-  btn.innerText = supported ? `Haptics: ${hapticOn ? 'On' : 'Off'}` : 'Haptics: Unsupported';
-  btn.disabled = !supported;
-}
+// Note: this module deliberately has no updateHapticsToggleText(). It used to,
+// reading the profile off a `window.__signalProfile` global that nothing ever
+// assigned — so it always rendered "Haptics: On" regardless of the real
+// setting. menu.ts and modals.ts each own the live version.
 
 export function renderStatsBar(): void {
   const hudMode  = document.getElementById('hud-mode');

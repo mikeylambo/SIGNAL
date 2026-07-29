@@ -3,7 +3,7 @@ import { startRenderLoop, stopRenderLoop, isLoopRunning } from './render/loop';
 import { state } from './state';
 import { applyTheme, currentThemeKey, t, setThemeChangeCallback, profile, saveProfile } from './save';
 import { updateMenuText, setupMenuListeners } from './ui/menu';
-import { setupModalListeners, returnToMenu } from './ui/modals';
+import { setupModalListeners, returnToMenu, pauseGame } from './ui/modals';
 import { setupLeaderboardBrowser } from './ui/leaderboard';
 import { onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchMove, onWindowResize } from './input';
 import { cubes, setCubeState, createBoard } from './render/board';
@@ -24,7 +24,10 @@ document.addEventListener('touchmove', (e: TouchEvent) => {
 {
   const splashEl = document.getElementById('splash-screen');
   if (splashEl) {
-    if (profile.hasCompletedOnboarding) {
+    // Keyed on hasSeenOnboarding, not hasCompletedOnboarding: a player who
+    // skipped the tutorial has still seen the app, and shouldn't sit through
+    // the first-run splash again on every launch.
+    if (profile.hasSeenOnboarding) {
       splashEl.remove();
     } else {
       setTimeout(() => {
@@ -138,8 +141,17 @@ window.addEventListener('load', () => {
   window.addEventListener('resize', onWindowResize);
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopRenderLoop();
-    else startRenderLoop();
+    if (document.hidden) {
+      // Suspend the run, not just the renderer. rAF stops while hidden but its
+      // timestamps keep tracking wall-clock, so a timed run used to be charged
+      // for the entire time the player was away and could end the moment they
+      // came back. Gameplay sequences (Observe flashes, the n-Back stream)
+      // would also play out unwatched.
+      pauseGame();
+      stopRenderLoop();
+    } else {
+      startRenderLoop();
+    }
   });
 
   // Debug handle for Playwright tests only — stripped by tree-shaking in prod

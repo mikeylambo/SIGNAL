@@ -64,21 +64,34 @@ export function setCubeState(cube: THREE.Mesh, cubeState: CubeState): void {
 }
 
 
+// Cube and edge geometry never vary — only how many instances exist — so they
+// are built once and shared. They were previously reallocated on every
+// createBoard() call (level-up, every Zen/Sprint mistake, every menu return)
+// and never disposed, leaking GPU buffers for the life of the session.
+const CUBE_GEOMETRY = new THREE.BoxGeometry(1, 1, 1);
+const EDGE_GEOMETRY = new THREE.EdgesGeometry(CUBE_GEOMETRY);
+
 export function createBoard(): void {
-  // Remove old cubes but keep reference valid
-  cubes.forEach(cube => boardGroup.remove(cube));
+  // Remove old cubes and release their GPU-side resources. Materials are
+  // per-cube (each carries its own rim uniforms) so they must be disposed
+  // individually; the two geometries above are shared and must not be.
+  cubes.forEach(cube => {
+    boardGroup.remove(cube);
+    (cube.material as THREE.Material).dispose();
+    const edges = cube.children[0] as THREE.LineSegments | undefined;
+    if (edges) (edges.material as THREE.Material).dispose();
+  });
   cubes.length = 0;
 
   const spacing = 1.4;
   const offset = (state.gridSize - 1) * spacing / 2;
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
 
   for (let x = 0; x < state.gridSize; x++) {
     for (let z = 0; z < state.gridSize; z++) {
       const material = makeRimMaterial({ color: t.base, roughness: 0.55, metalness: 0.25 });
-      const cube = new THREE.Mesh(geometry, material);
+      const cube = new THREE.Mesh(CUBE_GEOMETRY, material);
       const edges = new THREE.LineSegments(
-        new THREE.EdgesGeometry(geometry),
+        EDGE_GEOMETRY,
         new THREE.LineBasicMaterial({ color: t.edge, linewidth: 2 })
       );
       cube.add(edges);

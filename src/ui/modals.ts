@@ -1,4 +1,4 @@
-import { state } from '../state';
+import { state, endRun } from '../state';
 import { profile, saveProfile } from '../save';
 import { initGame, showResultsScreen, registerShowResultsScreen, stopTimer, runTimer, registerReturnToMenu } from '../game/runLoop';
 import { createBoard } from '../render/board';
@@ -14,7 +14,31 @@ registerShowResultsScreen(showResultsScreen);
 // Register returnToMenu so startOnboardingRound() can navigate back after tutorial
 registerReturnToMenu(returnToMenu);
 
+/**
+ * Opens the pause screen. Shared by the pause button and by the
+ * visibilitychange handler, so backgrounding the app suspends the run instead
+ * of letting an unattended Observe sequence, n-Back stream, or countdown play
+ * out — and, in timed modes, instead of billing the away time to the clock.
+ * No-op unless a run is actually live.
+ */
+export function pauseGame(): void {
+  if (state.isPaused) return;
+  if (!state.isPlayable && !state.timerActive && !state.nBackActive) return;
+  state.wasTimerActiveBeforePause = state.timerActive;
+  state.isPaused = true;
+  stopTimer();
+  (document.getElementById('pause-screen') as HTMLElement).style.display = 'flex';
+  (document.getElementById('ui-layer') as HTMLElement).style.opacity = '0';
+  (document.getElementById('canvas-container') as HTMLElement).style.filter = 'blur(15px)';
+}
+
 export function returnToMenu(): void {
+  // Retire the run first — otherwise anything still awaiting in runLoop.ts
+  // (an n-Back stream, a queued startLevel) keeps driving the game from
+  // underneath the menu and can throw a results screen over it seconds later.
+  endRun();
+  state.isPaused = false;
+  (document.getElementById('countdown-overlay') as HTMLElement).style.opacity = '0';
   (document.getElementById('results-screen') as HTMLElement).style.display = 'none';
   (document.getElementById('pause-screen')   as HTMLElement).style.display = 'none';
   (document.getElementById('profile-screen') as HTMLElement).style.display = 'none';

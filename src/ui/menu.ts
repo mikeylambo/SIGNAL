@@ -6,8 +6,8 @@ import type { CustomPalette } from '../types';
 import { playTone, initAudio, haptic, setMasterVolume } from '../audio';
 import { AUDIO_UNLOCKS, isAudioUnlocked, buyAudioUnlock, isAudioFeatureEnabled, setAudioFeatureEnabled } from '../audioUnlocks';
 import { renderStatsBar } from './hud';
-import { returnToMenu, updateReducedMotionText } from './modals';
-import { initGame, stopTimer, startOnboardingRound } from '../game/runLoop';
+import { returnToMenu, updateReducedMotionText, pauseGame } from './modals';
+import { initGame, startOnboardingRound } from '../game/runLoop';
 import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
 import { setDisplayName } from '../game/leaderboard';
 
@@ -338,7 +338,16 @@ export function setupMenuListeners(): void {
     initGame();
   });
 
-  // Daily row — the entire div is clickable; guard if already completed today
+  // Daily row — the entire div is clickable; guard if already completed today.
+  // It carries role="button" tabindex="0", but a div doesn't get Enter/Space
+  // activation for free the way a real <button> does, so the keyboard handler
+  // below is what makes that ARIA promise true rather than decorative.
+  dailyRow.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    dailyRow.click();
+  });
+
   dailyRow.addEventListener('click', (_e: MouseEvent) => {
     const today = new Date().toISOString().split('T')[0];
     if (profile.lastDailyDate === today) return;
@@ -352,16 +361,10 @@ export function setupMenuListeners(): void {
     initGame();
   });
 
-  // Pause
+  // Pause — shares pauseGame() with the backgrounding handler in main.ts
   pauseBtn.addEventListener('click', () => {
-    if (!state.isPlayable && !state.timerActive && !state.nBackActive) return;
     initAudio();
-    state.wasTimerActiveBeforePause = state.timerActive;
-    state.isPaused = true;
-    stopTimer();
-    (document.getElementById('pause-screen') as HTMLElement).style.display = 'flex';
-    (document.getElementById('ui-layer') as HTMLElement).style.opacity = '0';
-    (document.getElementById('canvas-container') as HTMLElement).style.filter = 'blur(15px)';
+    pauseGame();
   });
 
   // Stats modal

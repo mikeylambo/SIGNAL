@@ -3,8 +3,28 @@ import { test, expect, type Page } from '@playwright/test';
 // No beforeEach seed — these tests intentionally start with fresh localStorage
 // to exercise the onboarding flow.
 
-const ONBOARDING_TIMEOUT_MS = 20000; // countdown + constructing + observe phase
+const ONBOARDING_TIMEOUT_MS = 20000; // intro cards + observe flash sequence
 const SPLASH_TIMEOUT_MS = 5000;      // splash shows 2s + fade 0.5s + buffer
+
+/** Dismisses Step 1's intro card, which blocks on its button rather than a timer. */
+async function dismissIntroCard(page: Page) {
+  await page.locator('#ob-next-1').click({ timeout: 5000 });
+}
+
+/**
+ * Waits until the tutorial hands control to the player (Step 4, "Now tap them
+ * back"). These tests used to wait on #pause-btn, but the tutorial is a
+ * hand-rolled sequence that never calls startLevel() and so never shows the
+ * pause button — the wait could only ever time out.
+ */
+async function waitForTutorialExecute(page: Page) {
+  await page.waitForFunction(
+    () => Boolean((window as unknown as { __signal?: { getState: () => { isPlayable: boolean } } })
+      .__signal?.getState().isPlayable),
+    undefined,
+    { timeout: ONBOARDING_TIMEOUT_MS },
+  );
+}
 
 async function clickHowToPlay(page: Page) {
   // Splash blocks clicks for ~2s; Playwright retries until the element is actionable
@@ -58,12 +78,16 @@ test('skip button on onboarding lands on main menu and persists the flag', async
   await expect(page.locator('#start-btn')).toBeVisible({ timeout: 2000 });
   await expect(page.locator('#menu-sheet')).toBeVisible();
 
-  // Flag must be persisted to localStorage
-  const completed = await page.evaluate(() => {
+  // Skipping marks the tutorial seen but explicitly NOT completed — the two
+  // flags are distinct, and only hasSeenOnboarding gates re-showing it.
+  const flags = await page.evaluate(() => {
     const saved = localStorage.getItem('sig_profile_v1');
-    return saved ? (JSON.parse(saved) as { hasCompletedOnboarding: boolean }).hasCompletedOnboarding : null;
+    return saved
+      ? (JSON.parse(saved) as { hasSeenOnboarding: boolean; hasCompletedOnboarding: boolean })
+      : null;
   });
-  expect(completed).toBe(true);
+  expect(flags?.hasSeenOnboarding).toBe(true);
+  expect(flags?.hasCompletedOnboarding).toBe(false);
 });
 
 test('tutorial pattern only ever references real board tiles', async ({ page }) => {
@@ -75,7 +99,8 @@ test('tutorial pattern only ever references real board tiles', async ({ page }) 
   // round could only complete by pure luck and otherwise hung forever.
   await page.goto('/');
   await clickHowToPlay(page);
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: ONBOARDING_TIMEOUT_MS });
+  await dismissIntroCard(page);
+  await waitForTutorialExecute(page);
 
   type SignalHandle = { getState: () => { pattern: number[]; gridSize: number } };
   const { pattern, gridSize } = await page.evaluate(() => {
@@ -92,7 +117,8 @@ test('tutorial pattern only ever references real board tiles', async ({ page }) 
 test('tapping every pattern tile in the tutorial completes the round', async ({ page }) => {
   await page.goto('/');
   await clickHowToPlay(page);
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: ONBOARDING_TIMEOUT_MS });
+  await dismissIntroCard(page);
+  await waitForTutorialExecute(page);
 
   type SignalHandle = {
     getState: () => { pattern: number[] };
@@ -129,34 +155,57 @@ test('completing the onboarding round shows "Enter SIGNAL →" and landing on me
   // Trigger onboarding via How to Play
   await clickHowToPlay(page);
 
-  // Wait for Execute phase — pause button becomes visible
-  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: ONBOARDING_TIMEOUT_MS });
+  // Wait for the tutorial to hand control to the player
+  await dismissIntroCard(page);
+  await waitForTutorialExecute(page);
 
   // Verify normal run-again/menu buttons are absent during onboarding
   await expect(page.locator('#restart-btn')).toBeHidden();
 
-  // Trigger game over by clicking a wrong tile
+  // Reach the end of the tutorial via the mistake path rather than the clean
+  // one (covered by the test above). A wrong tap must NOT end the tutorial —
+  // it re-flashes the pattern and hands control back, twice, before giving up
+  // gracefully. So this taps wrong repeatedly and expects to still arrive at
+  // the final card.
   type SignalHandle = {
-    getState: () => { pattern: number[] };
+    getState: () => { pattern: number[]; isPlayable: boolean };
     getCubeScreenPos: (idx: number) => { x: number; y: number } | null;
   };
-  const wrongPos = await page.evaluate(() => {
-    const sig = (window as Window & { __signal?: SignalHandle }).__signal;
-    if (!sig) return null;
-    const { pattern } = sig.getState();
-    for (let i = 0; i < 9; i++) {
-      if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
+  const tapWrongTile = async () => {
+    const wrongPos = await page.evaluate(() => {
+      const sig = (window as Window & { __signal?: SignalHandle }).__signal;
+      if (!sig) return null;
+      const { pattern } = sig.getState();
+      for (let i = 0; i < 9; i++) {
+        if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
+      }
+      return null;
+    });
+    if (wrongPos) {
+      await page.mouse.click(wrongPos.x, wrongPos.y);
+    } else {
+      const box = await page.locator('canvas').boundingBox();
+      if (box) await page.mouse.click(box.x + 2, box.y + 2);
     }
-    return null;
-  });
+  };
 
-  if (wrongPos) {
-    await page.mouse.click(wrongPos.x, wrongPos.y);
-  } else {
-    // Fallback: click canvas corner (guaranteed wrong)
-    const box = await page.locator('canvas').boundingBox();
-    if (box) await page.mouse.click(box.x + 2, box.y + 2);
-  }
+  await tapWrongTile();
+
+  // The tutorial forgives the first mistake: it replays the pattern and makes
+  // the board playable again instead of ending the round.
+  await page.waitForFunction(
+    () => (window as unknown as { __signal?: SignalHandle }).__signal?.getState().isPlayable === false,
+    undefined, { timeout: 5000 },
+  );
+  await waitForTutorialExecute(page);
+  await expect(page.locator('#results-screen')).toBeHidden();
+
+  // Second mistake exhausts the retries and the tutorial bows out gracefully.
+  await tapWrongTile();
+
+  // Final card, then the results screen with the "Enter SIGNAL →" CTA
+  await expect(page.locator('#ob-next-6')).toBeVisible({ timeout: 20000 });
+  await page.locator('#ob-next-6').click();
 
   // Results screen appears with "Enter SIGNAL →" CTA
   await expect(page.locator('#results-screen')).toBeVisible({ timeout: 8000 });

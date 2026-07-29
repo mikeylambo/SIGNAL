@@ -58,6 +58,22 @@ Two patterns are used where a clean import graph isn't possible:
 - `SCHEMA_VERSION` in `save.ts` — bump and add a migration branch in `migrate()` whenever `SavedProfile` in `types.ts` gains fields.
 - The `custom` theme is rebuilt from `profile.customHex` at load time in `buildThemes()`.
 
+### Run lifecycle invariants
+
+- **`state.runId` + `endRun()`** (`state.ts`) is the ownership token for "the run currently in
+  progress". `endRun()` bumps it and is called by `initGame()`, `gameOver()`, and `returnToMenu()`.
+- Every async gameplay step in `runLoop.ts` captures `runId` at entry and returns early via
+  `isStale(runId)` after each `await`, `setTimeout`, or `cameraShake` callback. Without this an
+  abandoned run keeps writing to shared `state` and driving the DOM — that's how aborting a 2-Back
+  run used to throw a results screen over the main menu seconds later.
+- **Any new `await`/timer inside a gameplay sequence must re-check `isStale(runId)` after it.**
+  Adding one without the check reintroduces the bug class.
+- Pausing must never abandon a sequence. Wait the pause out (`awaitUnpaused()`); returning early
+  from mid-Observe leaves the round with no path back into Execute.
+- `runTimer()` clamps its per-frame delta to `MAX_TIMER_FRAME_MS`. rAF timestamps advance across
+  gaps where no frame fired, so an unclamped delta bills the player for backgrounded time.
+- Backgrounding auto-pauses via `pauseGame()` in `ui/modals.ts` — shared with the pause button.
+
 ### Render loop invariants
 
 - **Double-loop guard**: `startRenderLoop()` is a no-op if `loopRunning` is already true. Never call `requestAnimationFrame(animate)` directly outside of `loop.ts`.

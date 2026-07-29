@@ -98,7 +98,13 @@ const SaveSystem = (() => {
       raw.schemaVersion = 8;
     }
     if (raw.schemaVersion < 9) {
-      // v8 → v9: master volume setting
+      // v8 → v9: master volume setting.
+      // `settings` predates this branch but a hand-edited or partially-written
+      // save can still arrive without it; reading `.volume` off undefined threw,
+      // and load()'s catch turns any throw into a full profile reset — so a
+      // missing sub-object silently wiped the player's progress instead of
+      // being backfilled.
+      if (!raw.settings) raw.settings = { haptics: true, sfx: true, volume: 0.7 };
       if (raw.settings.volume === undefined) raw.settings.volume = 0.7;
       raw.schemaVersion = 9;
     }
@@ -166,58 +172,11 @@ export function recordRun({ score, level, signalEarned, combo }: { score: number
   saveProfile();
 }
 
-// ── Streak tracking ────────────────────────────────────────────────────────────
-
-export interface StreakResult {
-  currentStreak: number;
-  longestStreak: number;
-  isNewRecord: boolean;
-  isMilestone: boolean;
-  milestoneValue: number | null;
-}
-
-const STREAK_MILESTONES = [3, 7, 14, 30, 60, 100] as const;
-
-export function recordStreakForToday(): StreakResult {
-  const today = new Date().toISOString().split('T')[0];
-
-  if (profile.lastRunDate === today) {
-    // Already counted today — return current values unchanged
-    return {
-      currentStreak: profile.currentStreak,
-      longestStreak: profile.longestStreak,
-      isNewRecord: false,
-      isMilestone: false,
-      milestoneValue: null,
-    };
-  }
-
-  const yesterday = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return d.toISOString().split('T')[0];
-  })();
-
-  if (profile.lastRunDate === yesterday) {
-    profile.currentStreak++;
-  } else {
-    profile.currentStreak = 1;
-  }
-
-  const isNewRecord = profile.currentStreak > profile.longestStreak;
-  if (isNewRecord) profile.longestStreak = profile.currentStreak;
-  profile.lastRunDate = today;
-  saveProfile();
-
-  const isMilestone = (STREAK_MILESTONES as ReadonlyArray<number>).includes(profile.currentStreak);
-  return {
-    currentStreak: profile.currentStreak,
-    longestStreak: profile.longestStreak,
-    isNewRecord,
-    isMilestone,
-    milestoneValue: isMilestone ? profile.currentStreak : null,
-  };
-}
+// Streak tracking lives in streaks.ts. This module previously carried a second,
+// unused implementation (recordStreakForToday) keyed on lastRunDate — any-run
+// semantics that v8 deliberately replaced with daily-challenge-only streaks.
+// Two sources of truth for the same counter is exactly how they drift, so the
+// dead one is gone rather than left as a tempting call target.
 
 // Themes — built after profile is loaded so custom theme reads profile.customPalette.
 // Custom calibration is always unlocked (free) — it's as much an accessibility

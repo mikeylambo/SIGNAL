@@ -88,8 +88,11 @@ export async function renderBoardInto(
   try {
     const scores = await fetchBoard(mode, limit);
     renderRows(scores, bodyEl);
-  } catch {
-    bodyEl.innerHTML = '<div style="padding:12px;font-family:var(--font-mono);font-size:0.78rem;color:var(--text-muted);">Could not load leaderboard.</div>';
+  } catch (err) {
+    console.warn('[leaderboard] fetchBoard failed:', err);
+    bodyEl.innerHTML =
+      '<div style="padding:12px;font-family:var(--font-mono);font-size:0.78rem;color:var(--text-muted);line-height:1.6;">' +
+      'Could not reach the leaderboard.<br>Your score is saved locally.</div>';
   }
 }
 
@@ -97,6 +100,19 @@ export async function showLeaderboardPanel(mode: string): Promise<void> {
   const body    = document.getElementById('leaderboard-body')!;
   const titleEl = document.getElementById('leaderboard-title');
   await renderBoardInto(mode, body, titleEl);
+}
+
+/**
+ * Paints the panel's title and loading skeleton synchronously, without
+ * fetching. The results screen calls this before awaiting the score submission
+ * so the panel reads as loading from the moment it appears — it used to stay
+ * an empty box for the entire duration of the submit round-trip, which on a
+ * slow connection is seconds of blank UI.
+ */
+export function showLeaderboardSkeleton(mode: string): void {
+  const titleEl = document.getElementById('leaderboard-title');
+  if (titleEl) titleEl.textContent = formatModeTitle(mode);
+  document.getElementById('leaderboard-body')!.innerHTML = buildSkeleton();
 }
 
 // "daily_2026-06-22" → "DAILY · JUN 22"

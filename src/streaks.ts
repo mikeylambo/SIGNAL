@@ -13,17 +13,50 @@ export function recordActivity(today: string): void {
   saveProfile();
 }
 
-/** Called when a daily challenge run ends (success or failure). */
-export function recordDailyCompletion(today: string): void {
-  if (profile.lastDailyDate === today) return;
+export interface DailyStreakResult {
+  currentStreak: number;
+  longestStreak: number;
+  isNewRecord: boolean;
+  isMilestone: boolean;
+  milestoneValue: number | null;
+}
+
+const STREAK_MILESTONES: ReadonlyArray<number> = [3, 7, 14, 30, 60, 100];
+
+/**
+ * Called when a daily challenge run ends (success or failure).
+ *
+ * Returns the resulting streak state. The results screen used to build this
+ * object itself with `isNewRecord`/`isMilestone` hardcoded to false, which made
+ * the milestone title and the new-record streak colour unreachable — hitting a
+ * 7-day streak looked identical to hitting a 6-day one.
+ */
+export function recordDailyCompletion(today: string): DailyStreakResult {
+  const unchanged = (): DailyStreakResult => ({
+    currentStreak: profile.currentStreak,
+    longestStreak: profile.longestStreak,
+    isNewRecord: false,
+    isMilestone: false,
+    milestoneValue: null,
+  });
+
+  if (profile.lastDailyDate === today) return unchanged();
 
   const wasYesterday = profile.lastDailyDate === yesterday(today);
   profile.currentStreak = wasYesterday ? profile.currentStreak + 1 : 1;
-  if (profile.currentStreak > profile.longestStreak) {
-    profile.longestStreak = profile.currentStreak;
-  }
+  const isNewRecord = profile.currentStreak > profile.longestStreak;
+  if (isNewRecord) profile.longestStreak = profile.currentStreak;
   profile.lastDailyDate = today;
   saveProfile();
+
+  const isMilestone = STREAK_MILESTONES.includes(profile.currentStreak);
+  return {
+    currentStreak: profile.currentStreak,
+    longestStreak: profile.longestStreak,
+    isNewRecord,
+    isMilestone,
+    milestoneValue: isMilestone ? profile.currentStreak : null,
+  };
 }
 
 /**

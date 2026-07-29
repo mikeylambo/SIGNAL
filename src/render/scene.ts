@@ -133,9 +133,19 @@ export function initScene(container: HTMLElement): void {
   adjustCameraForViewport();
 }
 
+// Particle materials are cached per colour instead of allocated per burst.
+// spawnParticles() fires on every hit and every mistake, and the material it
+// created was never disposed — a long session accumulated thousands of them,
+// each a live GPU resource and a potential shader-program variant.
+const particleMats = new Map<string, THREE.MeshStandardMaterial>();
+
 export function spawnParticles(position: THREE.Vector3, colorHex: string, count = 10): void {
-  const colorNum = parseInt(colorHex.replace('#', ''), 16);
-  const particleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: colorNum, emissiveIntensity: 2 });
+  let particleMat = particleMats.get(colorHex);
+  if (!particleMat) {
+    const colorNum = parseInt(colorHex.replace('#', ''), 16);
+    particleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: colorNum, emissiveIntensity: 2 });
+    particleMats.set(colorHex, particleMat);
+  }
   for (let i = 0; i < count; i++) {
     const mesh = new THREE.Mesh(particleGeo, particleMat);
     mesh.position.copy(position);

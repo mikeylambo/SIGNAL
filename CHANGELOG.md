@@ -7,6 +7,70 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed — run lifecycle
+- **Run clock billed the player for time no frame rendered**: `runTimer()` subtracted the raw
+  `requestAnimationFrame` inter-frame delta. rAF timestamps track wall-clock even across gaps where
+  no frame fires (a backgrounded tab, a sleeping device, main-thread jank), so the first frame after
+  a gap charged the entire gap to the run. Measured: a 3,088 ms stall drained 3,150 ms of clock;
+  after clamping the per-frame delta to 100 ms, the same stall costs 167 ms.
+- **Backgrounding no longer abandons a live run**: `visibilitychange` previously stopped only the
+  renderer, so Observe flashes and the n-Back stream played out unwatched and timed modes kept
+  burning clock. It now calls the new shared `pauseGame()`, which the pause button also uses.
+- **Abandoned runs kept driving the game**: introduced a monotonic run token (`state.runId` /
+  `endRun()`). Every async gameplay step captures it and bails when it no longer matches. Aborting
+  a 2-Back run used to leave the stream advancing in the background; it would hit a missed match and
+  throw a game-over results screen over the main menu ~9 s after the player quit. The same class of
+  bug affected level transitions racing a sprint timer expiry.
+- **Pausing mid-Observe soft-locked the round**: the flash sequence returned early on pause with no
+  path back into Execute. It now waits out the pause instead of abandoning the level. The n-Back
+  flash window likewise no longer counts paused time against the player's reaction window.
+
+### Fixed — settings that did nothing
+- **SFX toggle**: persisted to the profile and updated its own label, but `playTone()` never read it.
+  Turning SFX off changed nothing.
+- **Master volume**: applied per-case inside `playTone()`, and roughly half the cases (hover, decoy,
+  tick, buy, levelDown, and the second layer of every stacked cue) never applied it — dragging the
+  slider to 0 left those audible. All SFX now route through a single `sfxBus` gain node.
+
+### Fixed — leaderboard and results
+- **Network failure reported as an empty board**: `fetchBoard()` swallowed errors and returned `[]`,
+  rendering an unreachable backend as "No scores yet — you might be first." It now throws, and the
+  panel distinguishes "empty" from "couldn't load".
+- **No timeout on leaderboard round-trips**: a hung connection left the panel on its loading skeleton
+  indefinitely. Reads and writes now abort after 6 s.
+- **Blank panel during score submission**: the leaderboard didn't begin rendering until the submit
+  round-trip finished. The skeleton now paints immediately.
+- **Streak milestones were unreachable**: the results screen built its streak result with
+  `isNewRecord`/`isMilestone` hardcoded to `false`, so the milestone title and new-record colour
+  could never fire — a 7-day streak looked identical to a 6-day one. `recordDailyCompletion()` now
+  returns the real result.
+- **Tutorial never reached its own ending**: `showResultsScreen()`'s onboarding path, the
+  `#enter-signal-btn` element and its listener were all built but unreachable, because finishing the
+  tutorial returned straight to the menu. Completing it now lands on the results screen as designed.
+
+### Fixed — other
+- **Save wipe on a profile missing `settings`**: the v8→v9 migration read `raw.settings.volume`
+  unguarded; the throw was caught by `load()`, which resets the profile — so a missing sub-object
+  silently erased progress instead of being backfilled.
+- **GPU resource leaks**: `createBoard()` reallocated cube and edge geometry on every call (level-up,
+  every Zen/Sprint mistake, every menu return) and never disposed the old materials; `spawnParticles()`
+  allocated a fresh material per burst, never disposed. Geometry is now shared, materials are disposed
+  on rebuild, and particle materials are cached per colour.
+- **Daily challenge was keyboard-inaccessible**: the row carries `role="button" tabindex="0"` but a
+  div gets no Enter/Space activation for free. Added the keyboard handler that makes that ARIA
+  promise true.
+- **Splash re-showed for players who skipped the tutorial**: keyed on `hasCompletedOnboarding`; now
+  keyed on `hasSeenOnboarding`.
+
+### Removed
+- `src/ui/onboarding.ts` — never imported by anything.
+- `recordStreakForToday()` in `save.ts` — a second, unused streak implementation using the any-run
+  semantics that v8 deliberately replaced with daily-only streaks.
+- `updateHapticsToggleText()` in `ui/hud.ts` — read the profile off a `window.__signalProfile` global
+  nothing ever assigned, so it always rendered "Haptics: On".
+- Stray root-level copies of `board.ts` / `loop.ts` / `modals.ts` / `scene.ts`, superseded by `src/`.
+- `.env` is no longer tracked by git (it was committed despite being in `.gitignore`).
+
 ### Fixed
 - **Onboarding skip flag**: `hasSeenOnboarding` and `hasCompletedOnboarding` are now persisted to
   localStorage at the very start of the skip-button handler, before `returnToMenu()` re-reads the

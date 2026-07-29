@@ -534,3 +534,109 @@ test('daily mode key is date-scoped', async ({ page }) => {
   const title = await page.locator('#leaderboard-title').textContent({ timeout: 3000 });
   expect(title).toMatch(/^DAILY · [A-Z]{3} \d{1,2}$/);
 });
+
+// ── Run-lifecycle regressions ─────────────────────────────────────────────────
+
+test('a long frame gap does not drain the run clock', async ({ page }) => {
+  // Regression: requestAnimationFrame timestamps track wall-clock even across
+  // gaps where no frame fired (a backgrounded tab, a sleeping device, main-thread
+  // jank). The timer subtracted the raw inter-frame delta, so the first frame
+  // after a gap billed the player for the whole gap. Measured before the fix:
+  // a ~3.1s stall drained ~3,150ms of clock; after, ~167ms.
+  await page.goto('/');
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+
+  const { before, after } = await page.evaluate(async () => {
+    type Sig = { getState: () => { timeLeft: number } };
+    const sig = (window as Window & { __signal?: Sig }).__signal!;
+    const before = sig.getState().timeLeft;
+    // Block the main thread so rAF genuinely cannot fire — same shape as the
+    // backgrounded-tab case, but deterministic.
+    const t0 = Date.now();
+    while (Date.now() - t0 < 3000) { /* intentional stall */ }
+    await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return { before, after: sig.getState().timeLeft };
+  });
+
+  expect(before - after).toBeLessThan(600);
+  await expect(page.locator('#results-screen')).toBeHidden();
+});
+
+test('backgrounding a live run auto-pauses it', async ({ page }) => {
+  // Gameplay used to keep running unattended when the tab went hidden: Observe
+  // flashes and the n-Back stream played out unseen, and timed modes kept
+  // burning clock. Only the renderer was stopped.
+  await page.goto('/');
+  await startGame(page);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  await expect(page.locator('#pause-screen')).toBeVisible({ timeout: 3000 });
+  const paused = await page.evaluate(
+    () => (window as Window & { __signal?: { getState: () => { isPaused: boolean } } })
+      .__signal!.getState().isPaused,
+  );
+  expect(paused).toBe(true);
+});
+
+test('aborting a 2-Back run stops it dead rather than ending it from the menu', async ({ page }) => {
+  // Regression: the n-Back stream kept advancing after Abort Run, hit a missed
+  // match, and threw a game-over results screen over the main menu ~9s later.
+  await page.goto('/');
+  for (let i = 0; i < 4; i++) await page.locator('#protocol-btn').click();
+  await expect(page.locator('#protocol-btn')).toHaveText('2-Back');
+
+  await page.locator('#start-btn').click();
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+  await page.waitForTimeout(1500);
+
+  await page.locator('#pause-btn').click();
+  await expect(page.locator('#pause-screen')).toBeVisible();
+  await page.locator('#pause-menu-btn').click();
+  await expect(page.locator('#menu-sheet')).toBeVisible();
+
+  const atAbort = await page.evaluate(
+    () => (window as Window & { __signal?: { getState: () => { nBackActive: boolean } } })
+      .__signal!.getState().nBackActive,
+  );
+  expect(atAbort).toBe(false);
+
+  // Give the abandoned stream more than enough time to misbehave.
+  await page.waitForTimeout(9000);
+  await expect(page.locator('#results-screen')).toBeHidden();
+  await expect(page.locator('#menu-sheet')).toBeVisible();
+});
+
+test('SFX toggle actually gates sound synthesis', async ({ page }) => {
+  // Regression: the toggle persisted to the profile and updated its own label,
+  // but playTone() never read it — turning SFX off changed nothing.
+  await page.goto('/');
+  await page.locator('#forge-btn').click();
+  await expect(page.locator('#sfx-toggle-btn')).toHaveText('SFX: On');
+  await page.locator('#sfx-toggle-btn').click();
+  await expect(page.locator('#sfx-toggle-btn')).toHaveText('SFX: Off');
+
+  const persisted = await page.evaluate(() => {
+    const saved = localStorage.getItem('sig_profile_v1');
+    return saved ? (JSON.parse(saved) as { settings: { sfx: boolean } }).settings.sfx : null;
+  });
+  expect(persisted).toBe(false);
+
+  // With SFX off, playTone must create no oscillators at all.
+  const oscillatorsCreated = await page.evaluate(() => {
+    let count = 0;
+    const proto = AudioContext.prototype as unknown as { createOscillator: () => OscillatorNode };
+    const original = proto.createOscillator;
+    proto.createOscillator = function (this: AudioContext) { count++; return original.call(this); };
+    document.getElementById('start-btn')!.click();
+    proto.createOscillator = original;
+    return count;
+  });
+  expect(oscillatorsCreated).toBe(0);
+});

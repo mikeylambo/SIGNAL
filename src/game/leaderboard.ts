@@ -19,6 +19,13 @@ export function dailyBoardKey(date: string): string {
 // For app-store compliance the submit_score DB function is the right place for
 // stronger moderation: a content-classification call, manual report queue, or
 // automated ban list surfaced in a moderation dashboard.
+/**
+ * How long to wait on any leaderboard round-trip before giving up.
+ * Past ~6s on mobile, "couldn't reach the leaderboard" is a better answer than
+ * a spinner that might never resolve — and the panel has no other upper bound.
+ */
+const FETCH_TIMEOUT_MS = 6000;
+
 const BLOCKED_WORDS: ReadonlyArray<string> = [
   'fuck', 'shit', 'cunt', 'bitch', 'dick', 'cock', 'pussy', 'ass',
   'nigger', 'nigga', 'faggot', 'fag', 'retard', 'chink', 'spic', 'kike', 'gook',
@@ -61,7 +68,7 @@ async function renameEverywhere(displayName: string): Promise<void> {
       p_player_id:    player_id,
       p_owner_secret: owner_secret,
       p_display_name: displayName.trim().slice(0, 32),
-    });
+    }).abortSignal(AbortSignal.timeout(FETCH_TIMEOUT_MS));
     if (error) throw error;
   } catch (err) {
     console.warn('[leaderboard] renameEverywhere failed:', err);
@@ -107,7 +114,7 @@ export async function submitScore(
       p_level_reached: levelReached,
       p_protocol:      protocol ?? null,
       p_pacing:        pacing ?? null,
-    });
+    }).abortSignal(AbortSignal.timeout(FETCH_TIMEOUT_MS));
 
     if (error) throw error;
     return data === true;
@@ -122,32 +129,35 @@ export async function submitScore(
 
 /**
  * Returns the top `limit` scores for `boardKey`, ranked by score descending.
- * Returns an empty array on any error so callers need no special handling.
+ *
+ * Throws on network/validation failure rather than returning `[]`. Swallowing
+ * the error here meant an unreachable backend rendered as the empty-board state
+ * — "No scores yet — you might be first." — which tells the player something
+ * false about a board that may be full. Callers distinguish the two: an empty
+ * array means the board really is empty; a rejection means we don't know.
  */
 export async function fetchBoard(
   boardKey: string,
   limit = 10,
 ): Promise<LeaderboardRow[]> {
-  try {
-    const supabase = getClient();
-    const { data, error } = await supabase
-      .from('leaderboard_scores')
-      .select('display_name, score, player_id, created_at')
-      .eq('board_key', boardKey)
-      .order('score', { ascending: false })
-      .limit(limit);
+  const supabase = getClient();
+  // Without this a hung connection leaves the panel on its loading skeleton
+  // indefinitely — there was no upper bound on how long a read could pend.
+  const { data, error } = await supabase
+    .from('leaderboard_scores')
+    .select('display_name, score, player_id, created_at')
+    .eq('board_key', boardKey)
+    .order('score', { ascending: false })
+    .limit(limit)
+    .abortSignal(AbortSignal.timeout(FETCH_TIMEOUT_MS));
 
-    if (error) throw error;
+  if (error) throw error;
 
-    return (data ?? []).map((row, i) => ({
-      rank:         i + 1,
-      display_name: row.display_name as string,
-      score:        row.score as number,
-      player_id:    row.player_id as string,
-      achieved_at:  row.created_at as string,
-    }));
-  } catch (err) {
-    console.warn('[leaderboard] fetchBoard failed:', err);
-    return [];
-  }
+  return (data ?? []).map((row, i) => ({
+    rank:         i + 1,
+    display_name: row.display_name as string,
+    score:        row.score as number,
+    player_id:    row.player_id as string,
+    achieved_at:  row.created_at as string,
+  }));
 }

@@ -2,6 +2,13 @@ import { profile, saveProfile } from './save';
 
 let audioCtx: AudioContext | null = null;
 
+// Every playTone() voice routes through this bus rather than straight to
+// destination, so master volume is applied in exactly one place. It used to be
+// multiplied in per-case, and roughly half the cases (hover, decoy, tick, buy,
+// levelDown, and the second layer of every stacked cue) never applied it —
+// dragging the slider to 0 left those still audible.
+let sfxBus: GainNode | null = null;
+
 // ── Ambient state ──────────────────────────────────────────────────────────────
 
 let menuAmbientCarrier: OscillatorNode | null = null;
@@ -16,8 +23,13 @@ export function getVolume(): number { return profile.settings.volume ?? 0.7; }
 export function setMasterVolume(v: number): void {
   profile.settings.volume = v;
   saveProfile();
-  if (menuAmbientRunning && menuAmbientOut && audioCtx) {
-    const now = audioCtx.currentTime;
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  if (sfxBus) {
+    sfxBus.gain.setValueAtTime(sfxBus.gain.value, now);
+    sfxBus.gain.linearRampToValueAtTime(v, now + 0.1);
+  }
+  if (menuAmbientRunning && menuAmbientOut) {
     menuAmbientOut.gain.setValueAtTime(menuAmbientOut.gain.value, now);
     menuAmbientOut.gain.linearRampToValueAtTime(0.008 * v, now + 0.1);
   }
@@ -27,6 +39,11 @@ export function initAudio(): void {
   if (!audioCtx) {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     audioCtx = new AudioCtx();
+  }
+  if (!sfxBus) {
+    sfxBus = audioCtx.createGain();
+    sfxBus.gain.setValueAtTime(getVolume(), audioCtx.currentTime);
+    sfxBus.connect(audioCtx.destination);
   }
   if (audioCtx.state === 'suspended') void audioCtx.resume();
 }
@@ -59,7 +76,9 @@ export function startMenuAmbient(): void {
   lfo.connect(lfoDepth);
   lfoDepth.connect(ampMod.gain);
 
-  // Master output gain — very quiet fade-in
+  // Master output gain — very quiet fade-in.
+  // Ambient is not an SFX cue, so it bypasses sfxBus (and the SFX toggle) and
+  // applies master volume itself, the same way the binaural/gamma layers do.
   const out = ctx.createGain();
   out.gain.setValueAtTime(0, now);
   out.gain.linearRampToValueAtTime(0.008 * getVolume(), now + 3);
@@ -127,7 +146,7 @@ function voice(
   } else {
     osc.connect(gain);
   }
-  gain.connect(ctx.destination);
+  gain.connect(sfxBus ?? ctx.destination);
   return { osc, gain };
 }
 
@@ -137,6 +156,9 @@ function voice(
 
 export function playTone(type: string, pan = 0): void {
   if (!audioCtx) return;
+  // The SFX toggle previously wrote to the profile and updated its own label
+  // but was never read here, so turning SFX off changed nothing.
+  if (!profile.settings.sfx) return;
   const ctx = audioCtx;
   const now = ctx.currentTime;
 
@@ -153,7 +175,7 @@ export function playTone(type: string, pan = 0): void {
     case 'active': {
       // Layered: triangle fundamental + sine 5th for shimmer
       const { osc, gain } = voice(ctx, 'triangle', 528, pan);
-      gain.gain.linearRampToValueAtTime(0.06 * getVolume(), now + 0.01);
+      gain.gain.linearRampToValueAtTime(0.06, now + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
       osc.start(now); osc.stop(now + 0.2);
 
@@ -176,7 +198,7 @@ export function playTone(type: string, pan = 0): void {
       // Rising ping: sine sweep + high harmonic sparkle
       const { osc, gain } = voice(ctx, 'sine', 880, pan);
       osc.frequency.exponentialRampToValueAtTime(1760, now + 0.12);
-      gain.gain.linearRampToValueAtTime(0.1 * getVolume(), now + 0.01);
+      gain.gain.linearRampToValueAtTime(0.1, now + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
       osc.start(now); osc.stop(now + 0.22);
 
@@ -191,7 +213,7 @@ export function playTone(type: string, pan = 0): void {
       // Descending crunch + dissonant rumble
       const { osc, gain } = voice(ctx, 'sawtooth', 110, pan);
       osc.frequency.linearRampToValueAtTime(40, now + 0.4);
-      gain.gain.setValueAtTime(0.18 * getVolume(), now);
+      gain.gain.setValueAtTime(0.18, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
       osc.start(now); osc.stop(now + 0.4);
 
@@ -208,7 +230,7 @@ export function playTone(type: string, pan = 0): void {
       freqs.forEach((f, i) => {
         const t0 = now + i * 0.09;
         const { osc, gain } = voice(ctx, 'triangle', f, 0);
-        gain.gain.linearRampToValueAtTime(0.1 * getVolume(), t0 + 0.02);
+        gain.gain.linearRampToValueAtTime(0.1, t0 + 0.02);
         gain.gain.linearRampToValueAtTime(0, t0 + 0.16);
         osc.start(t0); osc.stop(t0 + 0.18);
       });
@@ -236,7 +258,7 @@ export function playTone(type: string, pan = 0): void {
 
     case 'go': {
       const { osc, gain } = voice(ctx, 'square', 1320, 0);
-      gain.gain.setValueAtTime(0.08 * getVolume(), now);
+      gain.gain.setValueAtTime(0.08, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
       osc.start(now); osc.stop(now + 0.3);
 
@@ -260,7 +282,7 @@ export function playTone(type: string, pan = 0): void {
     case 'comboTick': {
       const { osc, gain } = voice(ctx, 'triangle', 900, 0);
       osc.frequency.exponentialRampToValueAtTime(1800, now + 0.12);
-      gain.gain.setValueAtTime(0.12 * getVolume(), now);
+      gain.gain.setValueAtTime(0.12, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
       osc.start(now); osc.stop(now + 0.25);
 

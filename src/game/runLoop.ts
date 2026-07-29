@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { state } from '../state';
+import { state, endRun } from '../state';
 import { PROTOCOLS, PACINGS } from './protocols';
 import { cubes, setCubeState, createBoard } from '../render/board';
 import { camera, spawnParticles, adjustCameraForViewport } from '../render/scene';
@@ -7,11 +7,11 @@ import { loopState, cameraShake, flashScreen, resetPivotRotation } from '../rend
 import { playTone, haptic, initAudio } from '../audio';
 import { startGameplayAudio, stopGameplayAudio, spatialPan } from '../audioUnlocks';
 import { addSignal, recordRun, t, profile, saveProfile } from '../save';
-import { recordActivity, recordDailyCompletion } from '../streaks';
+import { recordActivity, recordDailyCompletion, type DailyStreakResult } from '../streaks';
 import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI, updateStatsUI, renderStatsBar } from '../ui/hud';
 import { delay } from '../utils';
 import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
-import { promptDisplayName, showLeaderboardPanel } from '../ui/leaderboard';
+import { promptDisplayName, showLeaderboardPanel, showLeaderboardSkeleton } from '../ui/leaderboard';
 
 // isTouchDevice / hitstopScale — duplicated from input.ts to avoid circular deps
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -42,29 +42,48 @@ let _ob: ObHooks = {};
 export function setOnboardingHooks(h: ObHooks): void { _ob = h; }
 export function clearOnboardingHooks(): void { _ob = {}; }
 
-export async function runCountdown(): Promise<void> {
+/**
+ * True once `runId` no longer identifies the active run — i.e. the player
+ * aborted to the menu, died, or started a new run while this async step was
+ * still awaiting. Every await in a gameplay sequence must re-check this before
+ * touching state or the DOM; otherwise an abandoned run keeps driving the game
+ * (an aborted 2-Back stream, for instance, used to run to completion in the
+ * background and throw a game-over screen over the main menu seconds later).
+ */
+function isStale(runId: number): boolean {
+  return state.runId !== runId;
+}
+
+export async function runCountdown(runId: number = state.runId): Promise<void> {
   // Waits for unpause before counting elapsed time — countdown freezes while paused
+  // Counts only unpaused time toward `ms`, so pausing mid-countdown freezes it
+  // rather than letting the pause duration count as elapsed.
   async function pauseAwareDelay(ms: number): Promise<void> {
-    while (state.isPaused) await delay(50);
-    const start = performance.now();
-    while (true) {
+    let remaining = ms;
+    let last = performance.now();
+    while (remaining > 0) {
       await delay(16);
-      if (!state.isPaused && performance.now() - start >= ms) break;
+      if (isStale(runId)) return;
+      const now = performance.now();
+      if (!state.isPaused) remaining -= now - last;
+      last = now;
     }
   }
 
   const countdownEl = document.getElementById('countdown-overlay')!;
   countdownEl.style.opacity = '1';
   for (let i = 3; i > 0; i--) {
-    while (state.isPaused) await delay(50);
+    while (state.isPaused) { await delay(50); if (isStale(runId)) return; }
+    if (isStale(runId)) { countdownEl.style.opacity = '0'; return; }
     countdownEl.innerText = String(i);
     countdownEl.style.transform = 'translate(-50%, -50%) scale(1.2)';
     playTone('tick');
     await pauseAwareDelay(100);
     countdownEl.style.transform = 'translate(-50%, -50%) scale(1)';
     await pauseAwareDelay(700);
+    if (isStale(runId)) { countdownEl.style.opacity = '0'; return; }
   }
-  while (state.isPaused) await delay(50);
+  while (state.isPaused) { await delay(50); if (isStale(runId)) return; }
   countdownEl.innerText = 'GO';
   countdownEl.style.color = 'var(--correct)';
   playTone('go');
@@ -73,9 +92,18 @@ export async function runCountdown(): Promise<void> {
   countdownEl.style.color = 'var(--active)';
 }
 
+// Longest single frame gap the timer will bill the player for. rAF stops
+// firing while a tab is hidden but its timestamps keep tracking wall-clock, so
+// an unclamped delta charges the entire backgrounded duration to the run the
+// instant it resumes — a 6s app-switch used to drain 6.5s off the clock and
+// end the run on return. Backgrounding also auto-pauses now (see pauseGame in
+// ui/modals.ts); this clamp is the backstop for the frame already in flight,
+// and it makes a genuinely slow device run the clock slow rather than skip it.
+const MAX_TIMER_FRAME_MS = 100;
+
 export function runTimer(timestamp: number): void {
   if (!state.timerActive || state.isPaused) return;
-  const delta = timestamp - state.lastFrameTime;
+  const delta = Math.min(timestamp - state.lastFrameTime, MAX_TIMER_FRAME_MS);
   state.lastFrameTime = timestamp;
   state.timeLeft -= delta;
   if (state.timeLeft <= 0) {
@@ -91,6 +119,7 @@ export function runTimer(timestamp: number): void {
 export function stopTimer(): void {
   state.timerActive = false;
   if (state.timerAnimationId) cancelAnimationFrame(state.timerAnimationId);
+  state.timerAnimationId = 0;
 }
 
 
@@ -216,14 +245,31 @@ export async function startOnboardingRound(): Promise<void> {
     removeCallout();
     skipBtn.remove();
     clearOnboardingHooks();
-    state.isPlayable   = false;
-    state.isOnboarding = false;
+    state.isPlayable = false;
     profile.hasSeenOnboarding      = true;
     profile.hasCompletedOnboarding = completed;
     saveProfile();
     stopGameplayAudio();
     _stepResolve?.();
-    _returnToMenu?.();
+
+    if (!completed) {
+      // Skipping goes straight back to the menu — no results for a run the
+      // player opted out of.
+      state.isOnboarding = false;
+      _returnToMenu?.();
+      return;
+    }
+
+    // Finishing the tutorial hands off to the results screen, which has a
+    // dedicated onboarding path (zero signal, no Run Again, an "Enter SIGNAL →"
+    // CTA instead of Menu). That path — along with #enter-signal-btn and its
+    // listener in modals.ts — was fully built but unreachable, because this
+    // function used to return to the menu directly in both cases.
+    // state.isOnboarding stays true so showResultsScreen picks that path; the
+    // Enter SIGNAL handler clears it.
+    (document.getElementById('end-title') as HTMLElement).innerText = 'CALIBRATION COMPLETE';
+    (document.getElementById('end-title') as HTMLElement).style.color = 'var(--correct)';
+    _showResultsScreen?.();
   };
 
   skipBtn.addEventListener('click', () => finish(false));
@@ -432,6 +478,11 @@ export async function startOnboardingRound(): Promise<void> {
 
 
 export async function initGame(): Promise<void> {
+  // Invalidate whatever run came before (results screen, aborted run, an
+  // Observe sequence still awaiting) before setting up this one.
+  endRun();
+  const runId = state.runId;
+
   const today = new Date().toISOString().split('T')[0];
   recordActivity(today);
 
@@ -494,8 +545,10 @@ export async function initGame(): Promise<void> {
 
   createBoard();
   await delay(200);
+  if (isStale(runId)) return;
   gameplayHud.style.opacity = '1';  // fade HUD in (CSS transition: opacity 0.3s)
-  await runCountdown();
+  await runCountdown(runId);
+  if (isStale(runId)) return;
 
   if (pPace.id === 'sprint' && pMode.id !== 'nback') {
     state.timerActive = true;
@@ -503,11 +556,11 @@ export async function initGame(): Promise<void> {
     state.timerAnimationId = requestAnimationFrame(runTimer);
   }
 
-  if (pMode.id === 'nback') startNBackLevel();
-  else startLevel();
+  if (pMode.id === 'nback') startNBackLevel(runId);
+  else startLevel(runId);
 }
 
-export async function startLevel(): Promise<void> {
+export async function startLevel(runId: number = state.runId): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
   const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
@@ -527,6 +580,7 @@ export async function startLevel(): Promise<void> {
   showMessage('Constructing', 'var(--text)');
   cubes.forEach(c => { setCubeState(c, 'base'); c.userData['targetY'] = 0; c.userData['targetScale'] = 1; });
   await delay(500);
+  if (isStale(runId)) return;
 
   state.pattern = []; state.decoys = []; state.rhythmDelays = [];
   const totalTiles = state.gridSize * state.gridSize;
@@ -547,18 +601,30 @@ export async function startLevel(): Promise<void> {
   showMessage('Observe', 'var(--active)');
   _ob.onObserve?.();
   await delay(300);
+  if (isStale(runId)) return;
   const speedMult = pPace.id === 'sprint' ? 0.6 : 1;
+
+  // The Observe sequence must survive a pause rather than abandon the level:
+  // bailing out here used to leave the run with isPlayable false and no path
+  // back into Execute, so a pause landing mid-flash soft-locked the round.
+  const awaitUnpaused = async (): Promise<boolean> => {
+    while (state.isPaused) {
+      await delay(100);
+      if (isStale(runId)) return false;
+    }
+    return true;
+  };
 
   if (pMode.id === 'interference') {
     state.pattern.forEach(i => setCubeState(cubes[i], 'active'));
     state.decoys.forEach(i => setCubeState(cubes[i], 'decoy'));
     playTone('active', spatialPan(state.pattern[0] ?? 0)); playTone('decoy');
     await delay(1200 * speedMult);
-    if (state.isPaused) return;
+    if (isStale(runId) || !(await awaitUnpaused())) return;
     cubes.forEach(c => setCubeState(c, 'base'));
   } else {
     for (let i = 0; i < state.pattern.length; i++) {
-      if (state.isPaused) return;
+      if (!(await awaitUnpaused())) return;
       setCubeState(cubes[state.pattern[i]], 'active');
       playTone('active', spatialPan(state.pattern[i]));
       let pause = 200 * speedMult;
@@ -568,12 +634,14 @@ export async function startLevel(): Promise<void> {
         state.rhythmDelays.push(pause);
       }
       await delay(pause);
+      if (isStale(runId)) return;
       setCubeState(cubes[state.pattern[i]], 'base');
       await delay(150 * speedMult);
+      if (isStale(runId)) return;
     }
   }
 
-  if (state.isPaused) return;
+  if (!(await awaitUnpaused())) return;
   showMessage('Execute', 'var(--text)');
   _ob.onExecute?.();
   state.isPlayable = true;
@@ -591,7 +659,7 @@ export async function startLevel(): Promise<void> {
   }
 }
 
-export async function startNBackLevel(): Promise<void> {
+export async function startNBackLevel(runId: number = state.runId): Promise<void> {
   const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
   const stressBar = document.getElementById('stress-bar')!;
 
@@ -602,6 +670,7 @@ export async function startNBackLevel(): Promise<void> {
   cubes.forEach(c => { setCubeState(c, 'base'); c.userData['targetY'] = 0; c.userData['targetScale'] = 1; });
   showMessage('Stream Active', 'var(--text)');
   await delay(1000);
+  if (isStale(runId)) return;
 
   const streamLength = 10 + state.level;
   state.nBackStream = [];
@@ -619,8 +688,8 @@ export async function startNBackLevel(): Promise<void> {
   stressBar.style.width = '100%';
 
   for (let i = 0; i < state.nBackStream.length; i++) {
-    while (state.isPaused) await delay(100);
-    if (!state.nBackActive) return;
+    while (state.isPaused) { await delay(100); if (isStale(runId)) return; }
+    if (!state.nBackActive || isStale(runId)) return;
     state.nBackStep = i;
     const idx = state.nBackStream[i];
     const isMatch = (i >= 2 && state.nBackStream[i] === state.nBackStream[i - 2]);
@@ -631,20 +700,28 @@ export async function startNBackLevel(): Promise<void> {
     playTone('active', spatialPan(idx));
 
     const waitTime = Math.max(600, 1200 - (state.level * 50));
-    const startTime = Date.now();
-    while (Date.now() - startTime < waitTime) {
-      if (!state.nBackActive) return;
-      if (state.isPaused) { await delay(100); continue; }
+    // Pause time must not count toward the flash window, otherwise pausing
+    // during a flash silently burns the player's whole reaction window.
+    let elapsed = 0;
+    let last = Date.now();
+    while (elapsed < waitTime) {
+      if (!state.nBackActive || isStale(runId)) return;
+      if (state.isPaused) { await delay(100); last = Date.now(); continue; }
       await delay(20);
+      const now = Date.now();
+      elapsed += now - last;
+      last = now;
       if (state.userClicks.includes(i)) { clickedDuringFlash = true; break; }
     }
 
+    if (isStale(runId)) return;
     state.nBackIsFlashing = false;
     setCubeState(cubes[idx], 'base');
     if (isMatch && !clickedDuringFlash) { handleMistake(cubes[idx], 'MISSED'); return; }
     await delay(300);
+    if (isStale(runId)) return;
   }
-  if (state.nBackActive) levelComplete();
+  if (state.nBackActive && !isStale(runId)) levelComplete();
 }
 
 export function handleInteraction(cube: THREE.Mesh): void {
@@ -722,6 +799,7 @@ export function handleMistake(wrongCube: THREE.Mesh | null, reason: string): voi
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
   const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
+  const runId = state.runId;
 
   resetCombo();
   state.isPlayable = false;
@@ -753,7 +831,10 @@ export function handleMistake(wrongCube: THREE.Mesh | null, reason: string): voi
       if (state.level % 3 === 0) state.gridSize = Math.max(3, state.gridSize - 1);
       playTone('levelDown');
     }
-    setTimeout(() => { createBoard(); startLevel(); }, 1500);
+    setTimeout(() => {
+      if (isStale(runId)) return;
+      createBoard(); startLevel(runId);
+    }, 1500);
   } else if (pPace.id === 'sprint') {
     state.mistakes++; state.timeLeft -= 3000;
     showMessage('PENALTY −3s', 'var(--wrong)');
@@ -763,13 +844,17 @@ export function handleMistake(wrongCube: THREE.Mesh | null, reason: string): voi
       if (state.level % 3 === 0) state.gridSize = Math.max(3, state.gridSize - 1);
       playTone('levelDown');
     }
-    cameraShake(0.4, 350, () => { createBoard(); startLevel(); });
+    cameraShake(0.4, 350, () => {
+      if (isStale(runId)) return;
+      createBoard(); startLevel(runId);
+    });
   }
 }
 
 export async function levelComplete(): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
+  const runId = state.runId;
 
   // Fire onboarding hook before animations. If a hook was registered we're in
   // the tutorial — return immediately after playing the success sound so that
@@ -801,17 +886,20 @@ export async function levelComplete(): Promise<void> {
     }, i * 20);
   });
   await delay(800);
+  if (isStale(runId)) return;
 
   if (state.level > oldLevel) {
     if (state.level % 2 === 0) state.activeCount = Math.min(10, state.activeCount + 1);
     if (state.level % 3 === 0 && state.gridSize < 6) {
       state.gridSize++;
-      state.activeCount = Math.floor(state.activeCount * 0.8);
+      // activeCount must stay >= 3, or the grid grows while the pattern shrinks
+      // below the floor every other growth step and the run gets easier.
+      state.activeCount = Math.max(3, Math.floor(state.activeCount * 0.8));
       createBoard();
     }
   }
-  if (pMode.id === 'nback') startNBackLevel();
-  else startLevel();
+  if (pMode.id === 'nback') startNBackLevel(runId);
+  else startLevel(runId);
 }
 
 export function gameOver(reasonText: string): void {
@@ -819,7 +907,11 @@ export function gameOver(reasonText: string): void {
   const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement;
   const endTitle = document.getElementById('end-title')!;
 
-  state.isPlayable = false;
+  // Retire the run before any of the below awaits: an Observe sequence or
+  // n-Back stream still in flight would otherwise keep playing underneath the
+  // results screen and re-enable input on a run that's already over.
+  endRun();
+  const runId = state.runId;
   stopTimer();
   const obEnd = _ob.onRoundEnd; clearOnboardingHooks(); obEnd?.();
   playTone('wrong'); haptic('wrong');
@@ -829,6 +921,7 @@ export function gameOver(reasonText: string): void {
   showMessage(reasonText, 'var(--wrong)');
 
   cameraShake(0.7, 500, () => {
+    if (isStale(runId)) return;
     const aspect = window.innerWidth / window.innerHeight;
     const mobileFovAdjustment = aspect < 1 ? (1 / aspect) * 0.8 : 1;
     const dist = Math.max(12, state.gridSize * 2.5) * mobileFovAdjustment;
@@ -840,7 +933,10 @@ export function gameOver(reasonText: string): void {
     // before the jump, so the grid would visibly swing out of frame for the gap
     // before results screen appeared.
     camera.lookAt(0, 0, 0);
-    setTimeout(() => { if (_showResultsScreen) _showResultsScreen(); }, 500);
+    setTimeout(() => {
+      if (isStale(runId)) return;
+      if (_showResultsScreen) _showResultsScreen();
+    }, 500);
   });
 }
 
@@ -851,8 +947,15 @@ export async function showResultsScreen(): Promise<void> {
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
 
-  // Onboarding rounds do not count toward streak, stats, or signal balance
-  const streakResult = { currentStreak: profile.currentStreak, longestStreak: profile.longestStreak, isNewRecord: false, isMilestone: false, milestoneValue: null as number | null };
+  // Onboarding rounds do not count toward streak, stats, or signal balance.
+  // Daily runs overwrite this below with the real result from recordDailyCompletion().
+  let streakResult: DailyStreakResult = {
+    currentStreak: profile.currentStreak,
+    longestStreak: profile.longestStreak,
+    isNewRecord: false,
+    isMilestone: false,
+    milestoneValue: null,
+  };
 
   const uiLayer = document.getElementById('ui-layer')!;
   const resultsScreen = document.getElementById('results-screen')!;
@@ -878,9 +981,7 @@ export async function showResultsScreen(): Promise<void> {
   if (state.isDailyRun) {
     restartBtn.style.display = 'none';
     const todayDate = new Date().toISOString().split('T')[0];
-    recordDailyCompletion(todayDate);
-    streakResult.currentStreak = profile.currentStreak;
-    streakResult.longestStreak = profile.longestStreak;
+    streakResult = recordDailyCompletion(todayDate);
     state.earnedFragments = Math.floor(state.score / 5);
     resEarnedFrags.innerText = `${state.earnedFragments} · DAILY BONUS`;
   } else if (!state.isOnboarding) {
@@ -942,6 +1043,9 @@ export async function showResultsScreen(): Promise<void> {
     : modeBoardKey(pMode.id, pPace.id);
 
   let isNewBest = false;
+
+  // Show the panel as loading before the submit round-trip, not after it.
+  showLeaderboardSkeleton(boardKey);
 
   if (!state.isOnboarding) {
     // a. Display name — prompt on first run only
