@@ -79,6 +79,27 @@ Two patterns are used where a clean import graph isn't possible:
 - Flashes and phases are mirrored to `#sr-board-announce`. Any new visual-only game signal needs an
   announcement, or it doesn't exist for a screen-reader player.
 
+### Economy (`src/materials.ts`, `src/entitlements.ts`)
+
+- **The shop does not sell colour.** The Forge gives eight designed palettes and a full hue slider
+  away free, so anything sold as colour is a rotation away. Materials (surface, glow falloff,
+  transparency, wireframe) are the axis rotation cannot reach — that is what Signal buys.
+- **Paid Calibrations bundle a palette + a signature material.** That pairing is the product, and it
+  is why existing purchases gained value rather than being devalued. Owning a Calibration does NOT
+  grant its material for general use — that would be a cheap route to a 900–3000 Signal item.
+- `activeBoardMaterial()` re-checks ownership at render time. Never trust `profile.activeMaterial`
+  alone; a hand-edited save would otherwise equip anything.
+- **Premium never gates play.** Protocols, pacings, modifiers, the daily and the leaderboard are
+  free permanently. No energy timers, no ad-gated retries, no paid continues — in a permadeath game
+  a paid retry is how you get uninstalled. It sells cosmetics and record-keeping depth only.
+- The purchase button renders only when `VITE_PURCHASE_PROVIDER` is set, so no build ships a button
+  that cannot complete. `grantPremium()` is for a confirmed receipt — a client-set flag is not one.
+- **Store copy must describe sound, not promise cognition.** The audio layers were "Gamma Protocol —
+  40 Hz gamma-band entrainment" and "Binaural Focus"; both Apple and Google scrutinise implied
+  cognitive-benefit claims. The audio is unchanged, the promise is gone. Keep it that way.
+- `FREE_HISTORY_LIMIT` lives in `entitlements.ts`, not `progression.ts`. Splitting it across both
+  made their imports circular, which throws a TDZ error at init and white-screens the game.
+
 ### Modifiers (`src/game/modifiers.ts`)
 
 - Modifiers are **properties of existing protocols**, never new protocols. Chromatic failed as a

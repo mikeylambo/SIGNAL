@@ -1,6 +1,7 @@
 import { profile, saveProfile } from './save';
 import { PROTOCOLS } from './game/protocols';
 import type { ProtocolMastery } from './types';
+import { historyLimit } from './entitlements';
 
 /**
  * Per-protocol mastery — the game's long-arc progression.
@@ -14,7 +15,9 @@ import type { ProtocolMastery } from './types';
  * It records what already happened and derives a rank from it.
  */
 
-export const MASTERY_HISTORY_LIMIT = 20;
+// The history window lives in entitlements.ts — it is an entitlement, and
+// splitting it across both modules made their imports circular.
+export { FREE_HISTORY_LIMIT as MASTERY_HISTORY_LIMIT } from './entitlements';
 
 /**
  * Cumulative points needed to reach each rank. Index 0 is rank I.
@@ -136,8 +139,11 @@ export function recordProtocolRun(
   if (level > m.bestLevel) m.bestLevel = level;
 
   m.history.push({ d: dateISO, s: score, l: level });
-  if (m.history.length > MASTERY_HISTORY_LIMIT) {
-    m.history.splice(0, m.history.length - MASTERY_HISTORY_LIMIT);
+  // Premium widens the window rather than unlocking a separate feature — the
+  // free tier still gets a real trend line, just a shorter one.
+  const limit = historyLimit();
+  if (m.history.length > limit) {
+    m.history.splice(0, m.history.length - limit);
   }
 
   const rank = rankForPoints(m.points);

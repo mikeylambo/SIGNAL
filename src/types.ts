@@ -82,6 +82,12 @@ export interface SavedProfile {
   accessiblePalette: string;
   /** Last modifier chosen in the menu, restored on launch. */
   lastModifier: string;
+  /** Board materials bought with Signal. See materials.ts. */
+  unlockedMaterials: string[];
+  /** Material applied to custom (Forge) palettes. Calibrations use their own. */
+  activeMaterial: string;
+  /** One-time premium unlock. Cosmetics and record-keeping only — see entitlements.ts. */
+  premium: boolean;
 }
 
 export interface ForgeSelection {
@@ -92,6 +98,12 @@ export interface ForgeSelection {
 export interface Theme {
   name: string;
   price: number;
+  /**
+   * Signature material this Calibration equips. Paid Calibrations pair a
+   * palette with a treatment the Forge cannot produce — that pairing is what
+   * they sell, now that colour alone is free.
+   */
+  materialId: string;
   primary: string;
   bg: number;
   bgHex: string;

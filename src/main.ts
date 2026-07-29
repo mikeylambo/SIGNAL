@@ -180,6 +180,16 @@ window.addEventListener('load', () => {
   (window as Window & { __signal?: unknown }).__signal = {
     isLoopRunning,
     getState: () => state,
+    // Material properties of a board tile. Exposed so a test can prove a
+    // purchased treatment actually reaches the renderer rather than only the
+    // profile — those two drifting apart is the failure mode worth catching.
+    getBoardMaterial: () => {
+      const m = cubes[0]?.material as THREE.MeshStandardMaterial | undefined;
+      return m ? {
+        roughness: m.roughness, metalness: m.metalness, wireframe: m.wireframe,
+        transparent: m.transparent, opacity: m.opacity, flatShading: m.flatShading,
+      } : null;
+    },
     // Brightest tile on the board. Exists so a test can assert that the
     // Resonant modifier never lights one — the whole point of that modifier is
     // that nothing is shown, which is otherwise unobservable from outside.

@@ -980,3 +980,119 @@ test('2-Back offers no modifiers', async ({ page }) => {
   await expect(page.locator('#modifier-btn')).toBeDisabled();
   await expect(page.locator('#modifier-btn')).toHaveText('—');
 });
+
+// ── Economy ───────────────────────────────────────────────────────────────────
+
+type BoardMat = { roughness: number; metalness: number; wireframe: boolean; transparent: boolean };
+
+async function seedEconomy(page: Page, extra: Record<string, unknown>): Promise<void> {
+  await page.addInitScript((e: Record<string, unknown>) => {
+    localStorage.setItem('sig_profile_v1', JSON.stringify(Object.assign({
+      schemaVersion: 16, signal: 9999, unlockedCalibrations: ['mono', 'custom'], currentCalibration: 'custom',
+      customHex: '#00E5FF',
+      customPalette: { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' },
+      customPalettes: { custom1: { base: '#1C2733', active: '#00E5FF', correct: '#39FF88', wrong: '#FF3864', bg: '#05080D' } },
+      activeCustomSlot: 'custom1', hasSeenOnboarding: true, hasCompletedOnboarding: true,
+      unlockedAudioFeatures: [], player_id: '00000000-0000-0000-0000-000000000001',
+      owner_secret: '00000000-0000-0000-0000-000000000002', display_name: 'TestPlayer',
+      currentStreak: 0, longestStreak: 0, lastRunDate: null, lastActivityDate: null,
+      lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
+      lastDailyDate: null, settings: { haptics: true, sfx: true, volume: 0.7, telemetry: false },
+      protocolMastery: {}, customPaletteMeta: {}, accessiblePalette: '', lastModifier: 'none',
+      unlockedMaterials: [], activeMaterial: 'standard', premium: false,
+    }, e)));
+  }, extra);
+}
+
+const boardMat = (page: Page) => page.evaluate(
+  () => (window as Window & { __signal?: { getBoardMaterial: () => BoardMat | null } })
+    .__signal!.getBoardMaterial(),
+);
+
+test('a purchased material reaches the renderer, not just the profile', async ({ page }) => {
+  // The failure mode worth catching is the shop and the board disagreeing.
+  await seedEconomy(page, {});
+  await page.goto('/');
+  expect(await boardMat(page)).toMatchObject({ roughness: 0.55, metalness: 0.25, wireframe: false });
+
+  await seedEconomy(page, { unlockedMaterials: ['lattice'], activeMaterial: 'lattice' });
+  await page.reload();
+  await page.waitForTimeout(1200);
+  expect((await boardMat(page))!.wireframe).toBe(true);
+
+  await seedEconomy(page, { unlockedMaterials: ['glass'], activeMaterial: 'glass' });
+  await page.reload();
+  await page.waitForTimeout(1200);
+  expect((await boardMat(page))!.transparent).toBe(true);
+});
+
+test('an unowned material cannot be equipped by editing the save', async ({ page }) => {
+  // activeMaterial is re-checked against ownership at render time, so a
+  // hand-edited profile falls back to Standard rather than granting a 3000
+  // Signal treatment for free.
+  await seedEconomy(page, { unlockedMaterials: [], activeMaterial: 'lattice' });
+  await page.goto('/');
+  await page.waitForTimeout(1200);
+  expect((await boardMat(page))!.wireframe).toBe(false);
+});
+
+test('buying a material spends Signal and equips it', async ({ page }) => {
+  await seedEconomy(page, {});
+  await page.goto('/');
+  await page.locator('#store-btn').click();
+
+  const rows = page.locator('.store-item');
+  const count = await rows.count();
+  let bought = false;
+  for (let i = 0; i < count; i++) {
+    if ((await rows.nth(i).innerText()).includes('Matte')) {
+      await rows.nth(i).locator('button').click();
+      bought = true;
+      break;
+    }
+  }
+  expect(bought).toBe(true);
+
+  const saved = await page.evaluate(() => {
+    const raw = localStorage.getItem('sig_profile_v1');
+    return raw ? (JSON.parse(raw) as { signal: number; unlockedMaterials: string[]; activeMaterial: string }) : null;
+  });
+  expect(saved?.signal).toBe(9999 - 400);
+  expect(saved?.unlockedMaterials).toContain('matte');
+  expect(saved?.activeMaterial).toBe('matte');
+});
+
+test('paid Calibrations advertise the finish they bundle', async ({ page }) => {
+  // What a paid Calibration sells now is the pairing — colour alone is free in
+  // the Forge, so the treatment has to be visible in the listing.
+  await seedEconomy(page, {});
+  await page.goto('/');
+  await page.locator('#store-btn').click();
+  await expect(page.locator('#store-items-container')).toContainText('Palette + Chrome finish');
+  await expect(page.locator('#store-items-container')).toContainText('Palette + Glass finish');
+});
+
+test('premium is hidden when no purchase provider is configured', async ({ page }) => {
+  // Shipping a buy button that cannot complete is worse than shipping none.
+  await seedEconomy(page, {});
+  await page.goto('/');
+  await page.locator('#store-btn').click();
+  await expect(page.locator('#premium-buy-btn')).toHaveCount(0);
+  await expect(page.locator('#store-items-container')).not.toContainText('SIGNAL COMPLETE');
+});
+
+test('audio store copy makes no cognitive-benefit claims', async ({ page }) => {
+  // App Store and Play both scrutinise implied health/cognitive claims, and the
+  // old copy ("Gamma Protocol — 40 Hz gamma-band entrainment") is exactly the
+  // wording that draws a rejection for something unsubstantiated.
+  await seedEconomy(page, {});
+  await page.goto('/');
+  await page.locator('#store-btn').click();
+  const txt = await page.locator('#store-items-container').innerText();
+  for (const banned of ['entrainment', 'Gamma Protocol', 'Binaural Focus', 'gamma-band']) {
+    expect(txt).not.toContain(banned);
+  }
+  // The audio itself is unchanged — only the promise is gone.
+  expect(txt).toContain('Binaural Layer');
+  expect(txt).toContain('Pulse Layer');
+});

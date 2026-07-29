@@ -15,6 +15,9 @@ import { initGame, startOnboardingRound } from '../game/runLoop';
 import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
 import { setDisplayName } from '../game/leaderboard';
 import { renderMasteryList } from '../progression';
+import { BOARD_MATERIALS, isMaterialUnlocked, buyMaterial, setActiveMaterial, getMaterial } from '../materials';
+import { hasPremium, isPremiumOfferAvailable, PREMIUM_BENEFITS, paletteSlotCount } from '../entitlements';
+import { createBoard } from '../render/board';
 import { MODIFIERS, getModifier, isModifierUnlocked, modifiersAvailableFor, setModifier, type ModifierId } from '../game/modifiers';
 import { showKeyboardHelp } from '../keyboard';
 import { isTelemetryEnabled, setTelemetryEnabled } from '../telemetry';
@@ -124,6 +127,12 @@ export function populateStore(): void {
     title.className = 'store-item-title';
     title.textContent = th.name;
     info.appendChild(title);
+    // Naming the treatment is what makes a paid Calibration legible now that
+    // colour alone is free in the Forge — the pairing is the product.
+    const matNote = document.createElement('div');
+    matNote.style.cssText = 'font-family:var(--font-mono);font-size:0.66rem;color:var(--text-muted);margin-top:3px;';
+    matNote.textContent = `Palette + ${getMaterial(th.materialId).name} finish`;
+    info.appendChild(matNote);
     if (!isUnlocked) {
       const priceEl = document.createElement('div');
       priceEl.className = 'store-item-price';
@@ -144,6 +153,79 @@ export function populateStore(): void {
       btn.textContent = 'Buy';
       btn.classList.add('btn-store');
       btn.addEventListener('click', () => buyTheme(key, th.price));
+    }
+
+    item.appendChild(info);
+    item.appendChild(btn);
+    cnt.appendChild(item);
+  });
+
+  // ── Board materials ─────────────────────────────────────────────────────────
+  // The axis the Forge cannot reach, and therefore the only honest thing left
+  // to sell for Signal.
+  const matHeader = document.createElement('div');
+  matHeader.style.cssText = 'font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted);letter-spacing:1.5px;padding:10px 0 4px;border-top:1px solid var(--edge);margin-top:4px;';
+  matHeader.textContent = 'BOARD MATERIALS';
+  cnt.appendChild(matHeader);
+
+  const matNote = document.createElement('div');
+  matNote.style.cssText = 'font-family:var(--font-mono);font-size:0.64rem;color:var(--text-muted);line-height:1.5;padding-bottom:8px;';
+  matNote.textContent = 'Applied to your custom palettes. Calibrations use their own finish.';
+  cnt.appendChild(matNote);
+
+  BOARD_MATERIALS.forEach(mat => {
+    const owned = isMaterialUnlocked(mat.id) || hasPremium();
+    const equipped = (profile.activeMaterial ?? 'standard') === mat.id;
+
+    const item = document.createElement('div');
+    item.className = 'store-item';
+    item.style.borderLeft = '4px solid var(--text-muted)';
+
+    const info = document.createElement('div');
+    info.className = 'store-item-info';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'store-item-title';
+    titleEl.textContent = mat.name;
+    info.appendChild(titleEl);
+    const descEl = document.createElement('div');
+    descEl.style.cssText = 'font-family:var(--font-mono);font-size:0.68rem;color:var(--text-muted);margin-top:3px;line-height:1.4;';
+    descEl.textContent = mat.description;
+    info.appendChild(descEl);
+    if (!owned) {
+      const priceEl = document.createElement('div');
+      priceEl.className = 'store-item-price';
+      priceEl.textContent = `${mat.price} ⟠`;
+      info.appendChild(priceEl);
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'store-btn';
+    if (equipped && owned) {
+      btn.textContent = 'Equipped';
+      btn.classList.add('purchased');
+      btn.disabled = true;
+    } else if (owned) {
+      btn.textContent = 'Equip';
+      btn.addEventListener('click', () => {
+        setActiveMaterial(mat.id);
+        createBoard();          // rebuild so the change is visible immediately
+        populateStore();
+      });
+    } else {
+      btn.textContent = 'Buy';
+      btn.classList.add('btn-store');
+      btn.addEventListener('click', () => {
+        if (buyMaterial(mat.id)) {
+          setActiveMaterial(mat.id);
+          createBoard();
+          playTone('buy');
+          populateStore();
+          storeFragCount.innerText = String(getSignal());
+        } else {
+          playTone('wrong');
+          alert('Insufficient Signal.');
+        }
+      });
     }
 
     item.appendChild(info);
@@ -213,6 +295,49 @@ export function populateStore(): void {
     item.appendChild(btn);
     cnt.appendChild(item);
   });
+
+  renderPremiumSection(cnt);
+}
+
+/**
+ * The one-time unlock. Rendered only when a purchase provider is configured, so
+ * a build without one never shows a button that cannot complete.
+ */
+function renderPremiumSection(cnt: HTMLElement): void {
+  if (!hasPremium() && !isPremiumOfferAvailable()) return;
+
+  const header = document.createElement('div');
+  header.style.cssText = 'font-family:var(--font-mono);font-size:0.62rem;color:var(--active);letter-spacing:1.5px;padding:14px 0 4px;border-top:1px solid var(--edge);margin-top:4px;';
+  header.textContent = hasPremium() ? 'SIGNAL COMPLETE — UNLOCKED' : 'SIGNAL COMPLETE';
+  cnt.appendChild(header);
+
+  const body = document.createElement('div');
+  body.style.cssText = 'text-align:left;padding:4px 0 10px;';
+  body.innerHTML =
+    '<div style="font-family:var(--font-mono);font-size:0.64rem;color:var(--text-muted);line-height:1.6;margin-bottom:8px;">' +
+    'One purchase, no subscription. Every protocol, pacing, modifier, the daily ' +
+    'challenge and the leaderboard stay free either way.</div>' +
+    PREMIUM_BENEFITS.map(b =>
+      '<div style="display:flex;gap:8px;margin-bottom:5px;">' +
+      '<span style="color:var(--correct);">✓</span>' +
+      `<span style="font-family:var(--font-mono);font-size:0.66rem;color:var(--text);">${b.title}` +
+      `<span style="color:var(--text-muted);"> — ${b.detail}</span></span></div>`).join('');
+  cnt.appendChild(body);
+
+  if (isPremiumOfferAvailable()) {
+    const btn = document.createElement('button');
+    btn.className = 'store-btn btn-store';
+    btn.id = 'premium-buy-btn';
+    btn.style.width = '100%';
+    btn.textContent = 'Unlock';
+    btn.addEventListener('click', () => {
+      // Provider integration is the owner's to wire (App Store / Play / Stripe).
+      // Deliberately not faked: granting the entitlement client-side on a click
+      // would be a purchase flow that takes no money and can't be restored.
+      alert('Purchases are not enabled on this build.');
+    });
+    cnt.appendChild(btn);
+  }
 }
 
 function buyTheme(key: string, price: number): void {
@@ -307,8 +432,15 @@ function openForge(): void {
 
 function updateCustomSlotUI(): void {
   const active = profile.activeCustomSlot ?? 'custom1';
-  document.querySelectorAll<HTMLButtonElement>('.custom-slot-btn').forEach(btn => {
-    const isActive = btn.dataset['slot'] === active;
+  const slots = paletteSlotCount();
+  document.querySelectorAll<HTMLButtonElement>('.custom-slot-btn').forEach((btn, i) => {
+    // Slots beyond the free allowance are shown locked rather than hidden, so
+    // the premium benefit is legible from the screen it applies to.
+    const locked = i >= slots;
+    btn.disabled = locked;
+    btn.style.opacity = locked ? '0.35' : '1';
+    btn.title = locked ? 'Included with SIGNAL Complete' : '';
+    const isActive = !locked && btn.dataset['slot'] === active;
     btn.style.borderColor = isActive ? 'var(--active)' : 'rgba(255,255,255,0.14)';
     btn.style.color = isActive ? 'var(--active)' : '';
   });

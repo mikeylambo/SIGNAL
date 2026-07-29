@@ -7,6 +7,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed — economy
+- **The shop no longer sells colour.** Once the Forge shipped eight designed palettes and a full hue
+  slider for free, every paid Calibration was a rotation away — that isn't a pricing problem, it's
+  having nothing to sell. Signal now buys **board materials** (`src/materials.ts`): surface
+  character, glow falloff, transparency, flat shading, wireframe. None of it is expressible as a
+  palette, so it is genuinely additional to what the Forge produces. Six treatments, 0–3000 Signal.
+- **Paid Calibrations now bundle a palette and a signature material** — Ferro/Chrome,
+  Glacier/Glass, Redline/Facet — and say so in the listing. Existing purchases therefore *gained*
+  value instead of being devalued. Owning a Calibration deliberately does not grant its material for
+  general use, or a 500-Signal theme would be a cheap route to a 3000-Signal treatment.
+- Material ownership is re-checked at render time, so a hand-edited save cannot equip a treatment
+  that was never bought.
+- The economy no longer dead-ends: ~7,700 Signal of new sinks on top of the existing ~8,000, and
+  modifier score multipliers feed Signal earnings automatically.
+
+### Added — premium (scaffolding)
+- A single one-time **SIGNAL Complete** unlock (`src/entitlements.ts`): every board material,
+  8 palette slots instead of 3, and 500 runs of per-protocol history instead of 20.
+- Hard boundaries, stated in code: every protocol, pacing, modifier, the daily challenge and the
+  leaderboard stay free permanently. No energy timers, no ad-gated retries, no paid continues — in a
+  permadeath game, charging for a retry is how you get uninstalled. It sells cosmetics and
+  record-keeping, never advantage.
+- The purchase button renders **only** when `VITE_PURCHASE_PROVIDER` is configured, so no build ships
+  a button that cannot complete. Wiring an actual provider needs the owner's store/Stripe account;
+  `grantPremium()` is deliberately reserved for a confirmed receipt rather than a click.
+
+### Fixed
+- **Store copy made implied cognitive-benefit claims.** "Gamma Protocol — 40 Hz gamma-band
+  isochronic entrainment" and "Binaural Focus" are exactly the wording Apple and Google reject for an
+  app that cannot substantiate it. Renamed to Pulse Layer and Binaural Layer, described by what they
+  sound like. The audio itself is unchanged; only the promise is gone.
+- **Circular import between `progression.ts` and `entitlements.ts`** — each needed a symbol from the
+  other, which throws a TDZ error at module init and white-screens the game. Caught by running it,
+  not by the type-checker, which was happy with it.
+
 ### Fixed
 - **Menu layout**: the modifier control landed inside the Pacing column, breaking the
   PROTOCOL / PACING / STREAK alignment. It now has its own column and matches the other controls.

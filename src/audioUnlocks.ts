@@ -29,15 +29,15 @@ export const AUDIO_UNLOCKS: AudioUnlock[] = [
   },
   {
     id: 'binaural',
-    name: 'Binaural Focus',
+    name: 'Binaural Layer',
     price: 1000,
-    description: '40 Hz binaural beats during training. Requires headphones.',
+    description: 'A low 200/240 Hz tone pair, one per ear, under the sound effects. Headphones only.',
   },
   {
     id: 'gamma',
-    name: 'Gamma Protocol',
+    name: 'Pulse Layer',
     price: 2500,
-    description: '40 Hz gamma-band isochronic entrainment during runs. Experimental.',
+    description: 'A 320 Hz tone pulsing 40 times a second beneath the mix.',
   },
 ];
 
@@ -66,9 +66,14 @@ export function spatialPan(cubeIndex: number): number {
   return (col - 1) * 0.75;          // -0.75 | 0 | 0.75
 }
 
-// ── Binaural beats ─────────────────────────────────────────────────────────────
-// 200 Hz in left ear, 240 Hz in right ear → brain perceives a 40 Hz (gamma)
-// phantom beat. Runs at low gain during gameplay when "binaural" is unlocked.
+// ── Binaural layer ─────────────────────────────────────────────────────────────
+// 200 Hz left, 240 Hz right; the 40 Hz difference is perceived as a beat.
+//
+// Store copy deliberately describes the SOUND and makes no claim about focus,
+// cognition or brainwave entrainment. Both Apple and Google scrutinise implied
+// health or cognitive-benefit claims, and "Gamma Protocol — 40 Hz entrainment"
+// is exactly the kind of wording that draws a review rejection for an app that
+// cannot substantiate it. The audio is unchanged; only the promise is gone.
 
 let binauralL: OscillatorNode | null = null;
 let binauralR: OscillatorNode | null = null;
@@ -127,9 +132,10 @@ export function stopBinaural(): void {
   binauralL = binauralR = binauralOut = null;
 }
 
-// ── Gamma isochronic ───────────────────────────────────────────────────────────
+// ── Pulse layer ────────────────────────────────────────────────────────────────
 // 320 Hz carrier amplitude-modulated at 40 Hz. Stronger and more audible than
 // the menu ambient layer — this is what the user actively paid for.
+// As above: described as a sound, not as a cognitive intervention.
 
 let gammaCarrier: OscillatorNode | null = null;
 let gammaLfo: OscillatorNode | null = null;

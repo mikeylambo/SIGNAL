@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 15;
+const SCHEMA_VERSION = 16;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -55,6 +55,9 @@ const SaveSystem = (() => {
       },
       accessiblePalette: '',
       lastModifier: 'none',
+      unlockedMaterials: [],
+      activeMaterial: 'standard',
+      premium: false,
     };
   }
 
@@ -173,6 +176,18 @@ const SaveSystem = (() => {
       raw.lastModifier = 'none';
       raw.schemaVersion = 15;
     }
+    if (raw.schemaVersion < 16) {
+      // v15 → v16: board materials. Existing paid Calibrations keep working and
+      // now equip a signature material, so prior purchases gain value rather
+      // than being devalued by the Forge giving colour away free. Materials are
+      // NOT retro-granted for general use — a Calibration is a curated pairing,
+      // and granting its material would make it a cheap route to a 900–3000
+      // Signal item.
+      raw.unlockedMaterials = [];
+      raw.activeMaterial = 'standard';
+      raw.premium = false;
+      raw.schemaVersion = 16;
+    }
     return raw;
   }
 
@@ -231,11 +246,11 @@ function buildThemes(): Record<string, Theme> {
   const p = profile.customPalettes?.[slot] ?? profile.customPalette;
   const h = (hex: string) => parseInt(hex.replace('#', ''), 16);
   return {
-    mono:    { name: 'Mono',       price: 0,    primary: '#00E5FF', bg: 0x05080D, bgHex: '#05080D', text: '#E8FAFF', active: 0x00E5FF, activeHex: '#00E5FF', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF3864, wrongHex: '#FF3864', base: 0x1C2733, baseHex: '#1C2733', edge: 0x33455A },
-    ferro:   { name: 'Ferro',      price: 500,  primary: '#FFB454', bg: 0x0A0704, bgHex: '#0A0704', text: '#FFF4E5', active: 0xFFB454, activeHex: '#FFB454', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF3864, wrongHex: '#FF3864', base: 0x2E2013, baseHex: '#2E2013', edge: 0x4D3A1F },
-    glacier: { name: 'Glacier',    price: 1000, primary: '#9DEEFF', bg: 0x040A0F, bgHex: '#040A0F', text: '#F0FCFF', active: 0xC6F6FF, activeHex: '#C6F6FF', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF3864, wrongHex: '#FF3864', base: 0x16303D, baseHex: '#16303D', edge: 0x265066 },
-    redline: { name: 'Redline',    price: 2500, primary: '#FF3864', bg: 0x0A0405, bgHex: '#0A0405', text: '#FFE5EA', active: 0xFF3864, activeHex: '#FF3864', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF7A93, wrongHex: '#FF7A93', base: 0x2E1620, baseHex: '#2E1620', edge: 0x4D2433 },
-    custom:  { name: 'Calibrated', price: 0,    primary: p.active,  bg: h(p.bg),  bgHex: p.bg,      text: '#E8FAFF', active: h(p.active), activeHex: p.active, correct: h(p.correct), correctHex: p.correct, wrong: h(p.wrong), wrongHex: p.wrong, base: h(p.base), baseHex: p.base, edge: lightenHex(p.base, 1.7) },
+    mono:    { name: 'Mono',       price: 0,    materialId: 'standard',    primary: '#00E5FF', bg: 0x05080D, bgHex: '#05080D', text: '#E8FAFF', active: 0x00E5FF, activeHex: '#00E5FF', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF3864, wrongHex: '#FF3864', base: 0x1C2733, baseHex: '#1C2733', edge: 0x33455A },
+    ferro:   { name: 'Ferro',      price: 500,  materialId: 'chrome',  primary: '#FFB454', bg: 0x0A0704, bgHex: '#0A0704', text: '#FFF4E5', active: 0xFFB454, activeHex: '#FFB454', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF3864, wrongHex: '#FF3864', base: 0x2E2013, baseHex: '#2E2013', edge: 0x4D3A1F },
+    glacier: { name: 'Glacier',    price: 1000, materialId: 'glass', primary: '#9DEEFF', bg: 0x040A0F, bgHex: '#040A0F', text: '#F0FCFF', active: 0xC6F6FF, activeHex: '#C6F6FF', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF3864, wrongHex: '#FF3864', base: 0x16303D, baseHex: '#16303D', edge: 0x265066 },
+    redline: { name: 'Redline',    price: 2500, materialId: 'facet', primary: '#FF3864', bg: 0x0A0405, bgHex: '#0A0405', text: '#FFE5EA', active: 0xFF3864, activeHex: '#FF3864', correct: 0x39FF88, correctHex: '#39FF88', wrong: 0xFF7A93, wrongHex: '#FF7A93', base: 0x2E1620, baseHex: '#2E1620', edge: 0x4D2433 },
+    custom:  { name: 'Calibrated', price: 0,    materialId: 'standard',    primary: p.active,  bg: h(p.bg),  bgHex: p.bg,      text: '#E8FAFF', active: h(p.active), activeHex: p.active, correct: h(p.correct), correctHex: p.correct, wrong: h(p.wrong), wrongHex: p.wrong, base: h(p.base), baseHex: p.base, edge: lightenHex(p.base, 1.7) },
   };
 }
 
