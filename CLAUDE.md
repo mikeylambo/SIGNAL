@@ -137,6 +137,17 @@ Two patterns are used where a clean import graph isn't possible:
   gaps where no frame fired, so an unclamped delta bills the player for backgrounded time.
 - Backgrounding auto-pauses via `pauseGame()` in `ui/modals.ts` — shared with the pause button.
 
+### Three.js version (pinned 0.128.0)
+
+- The pin is deliberate and the version is old. An upgrade to 0.185 was attempted and reverted:
+  r152 colour management, r155 physical lighting and a reworked `UnrealBloomPass` each shift the
+  look, and the response across the bloom threshold is discontinuous, so no light-scale constant
+  reproduces the original.
+- If you take this on, treat it as an **art pass**: re-author palettes, emissive intensities, light
+  units and bloom strength/radius/threshold together, and compare against a screenshot baseline
+  rather than assuming. Board-region mean brightness on the menu is a workable metric (0.128
+  baseline ≈ 39.7).
+
 ### Render loop invariants
 
 - **Double-loop guard**: `startRenderLoop()` is a no-op if `loopRunning` is already true. Never call `requestAnimationFrame(animate)` directly outside of `loop.ts`.

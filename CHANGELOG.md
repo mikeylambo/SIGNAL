@@ -7,6 +7,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Menu layout**: the modifier control landed inside the Pacing column, breaking the
+  PROTOCOL / PACING / STREAK alignment. It now has its own column and matches the other controls.
+
+### Not done — Three.js upgrade (deliberately deferred)
+Attempted 0.128 → 0.185 and reverted. It compiles, runs, and passes the suite, but the authored look
+cannot be recovered by configuration:
+
+- r152 turned colour management on by default, r155 switched lighting to physical units, and
+  `UnrealBloomPass` was reworked. All three change how existing colours, lights and glow resolve.
+- Measured against a pixel baseline (board-region mean brightness; baseline **39.69**): raw upgrade
+  **58.24** (background washed to slate grey, glow gone); `ColorManagement` off + linear output
+  **25.17** (too dark); light intensities × π **64.56** (blown out).
+- Swept light scale 1.6–2.9 against bloom threshold 0.08–0.18. Best was **RMSE 22.29** at scale 2.4,
+  still visibly off — and the response is *discontinuous* across the bloom threshold, so no constant
+  lands on the original.
+
+Conclusion: palettes, emissive intensities, light units and bloom strength/radius/threshold have to
+be re-authored **together**. That is an art decision, not a dependency bump, and smuggling a visual
+regression into a version upgrade would be worse than staying current-but-old. Reverted to the
+pinned 0.128.0 and verified pixel-identical to baseline (RMSE 0.00).
+
 ### Added — modifiers
 - **A modifier axis** (`src/game/modifiers.ts`): properties applied to existing protocols rather
   than new protocols. Two modifiers across four grid protocols is eight new experiences from a small
