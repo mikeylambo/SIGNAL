@@ -7,6 +7,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added — observability
+- **Anonymous telemetry** (`src/telemetry.ts`), replacing the `TODO` in `errorBoundary.ts`. Crash
+  rate, WebGL init failures, and run start/end were previously unobservable in the field — "check
+  the console" only works for players you can reach. Deliberately constrained: inert unless
+  `VITE_TELEMETRY_URL` is set (so forks and local builds send nothing), player-toggleable under
+  Settings → Accessibility, and it never sends `player_id`, `owner_secret`, display name, or
+  anything the player typed. The install id is separate from the leaderboard identity precisely so
+  crash data cannot be joined to a named leaderboard row. Repeated errors collapse after three of
+  the same signature, so a render-loop exception can't drown the queue.
+
+### Added — installable and offline
+- **PWA manifest, icons, and a service worker.** Now that every asset is same-origin, offline play
+  was nearly free. Navigations are network-first with a cached-shell fallback; content-hashed
+  `/assets/*`, fonts and icons are cache-first (the hash is the version, so a hit can't be stale).
+  Cross-origin requests are never intercepted — a cached leaderboard would be worse than none, and
+  score submissions must not be replayed from cache. Verified booting fully offline.
+- Icons are rendered from the existing favicon artwork, including a maskable variant inset for
+  Android's circular crop, plus an Apple touch icon and the iOS-specific meta tags (iOS ignores the
+  manifest's display mode).
+
 ### Changed — Forge
 - **The Forge is now "pick a designed base, rotate its hue"** instead of five independent RGB
   sliders across five colour roles. The old control let a player reach thousands of states that

@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -37,7 +37,7 @@ const SaveSystem = (() => {
       lastRunDate: null,
       lastActivityDate: null,
       lastDailyDate: null,
-      settings: { haptics: true, sfx: true, volume: 0.7 },
+      settings: { haptics: true, sfx: true, volume: 0.7, telemetry: true },
       unlockedAudioFeatures: [],
       audioFeatureEnabled: {},
       customPalettes: {
@@ -111,7 +111,7 @@ const SaveSystem = (() => {
       // and load()'s catch turns any throw into a full profile reset — so a
       // missing sub-object silently wiped the player's progress instead of
       // being backfilled.
-      if (!raw.settings) raw.settings = { haptics: true, sfx: true, volume: 0.7 };
+      if (!raw.settings) raw.settings = { haptics: true, sfx: true, volume: 0.7, telemetry: true };
       if (raw.settings.volume === undefined) raw.settings.volume = 0.7;
       raw.schemaVersion = 9;
     }
@@ -158,6 +158,13 @@ const SaveSystem = (() => {
       };
       raw.accessiblePalette = '';
       raw.schemaVersion = 13;
+    }
+    if (raw.schemaVersion < 14) {
+      // v13 → v14: telemetry opt-out. Defaults on, but the whole subsystem is
+      // inert unless VITE_TELEMETRY_URL is configured, so this does nothing on
+      // a build that hasn't opted in to collecting anything.
+      if (raw.settings.telemetry === undefined) raw.settings.telemetry = true;
+      raw.schemaVersion = 14;
     }
     return raw;
   }

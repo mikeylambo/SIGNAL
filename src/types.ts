@@ -58,6 +58,8 @@ export interface SavedProfile {
     haptics: boolean;
     sfx: boolean;
     volume: number;
+    /** Opt-out for anonymous crash/usage reporting. See telemetry.ts. */
+    telemetry: boolean;
   };
   unlockedAudioFeatures: string[];
   audioFeatureEnabled: Record<string, boolean>;

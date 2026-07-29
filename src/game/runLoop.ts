@@ -12,6 +12,7 @@ import { recordProtocolRun, rankNumeral, rankTitle, rankProgress, type MasteryRe
 import { showMessage, updateComboUI, resetCombo, spawnScorePopup, updateTimerUI, updateStatsUI, renderStatsBar } from '../ui/hud';
 import { delay } from '../utils';
 import { announceFlash, announcePhase, resetKeyboardCursor } from '../keyboard';
+import { track } from '../telemetry';
 import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
 import { promptDisplayName, showLeaderboardPanel, showLeaderboardSkeleton } from '../ui/leaderboard';
 
@@ -491,6 +492,11 @@ export async function initGame(): Promise<void> {
 
   const today = new Date().toISOString().split('T')[0];
   recordActivity(today);
+  track('run_start', {
+    protocol: PROTOCOLS[state.curProtIdx].id,
+    pacing: PACINGS[state.curPaceIdx].id,
+    daily: state.isDailyRun,
+  });
 
   const pMode = PROTOCOLS[state.curProtIdx];
   const pPace = PACINGS[state.curPaceIdx];
@@ -1059,6 +1065,14 @@ export async function showResultsScreen(): Promise<void> {
   if (!state.isOnboarding) {
     addSignal(state.earnedFragments);
     recordRun({ score: state.score, level: state.level, signalEarned: state.earnedFragments, combo: state.maxCombo });
+    track('run_end', {
+      protocol: pMode.id,
+      pacing: pPace.id,
+      level: state.level,
+      score: state.score,
+      combo: state.maxCombo,
+      daily: state.isDailyRun,
+    });
     mastery = recordProtocolRun(
       pMode.id,
       state.score,

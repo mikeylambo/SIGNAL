@@ -16,6 +16,7 @@ import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
 import { setDisplayName } from '../game/leaderboard';
 import { renderMasteryList } from '../progression';
 import { showKeyboardHelp } from '../keyboard';
+import { isTelemetryEnabled, setTelemetryEnabled } from '../telemetry';
 
 export function updateMenuText(): void {
   const pMode = PROTOCOLS[state.curProtIdx];
@@ -498,9 +499,14 @@ export function setupMenuListeners(): void {
     switchSettingsTab('access');
     buildAccessList();
     updateReducedMotionText();
+    updateTelemetryUI();
   });
   document.getElementById('close-forge-btn-access')!.addEventListener('click', returnToMenu);
   document.getElementById('keyboard-help-btn')!.addEventListener('click', showKeyboardHelp);
+  document.getElementById('telemetry-toggle-btn')!.addEventListener('click', () => {
+    setTelemetryEnabled(!(profile.settings.telemetry !== false));
+    updateTelemetryUI();
+  });
   document.getElementById('reduced-motion-btn-access')!.addEventListener('click', () => {
     toggleReducedMotion();
     updateReducedMotionText();
@@ -596,6 +602,20 @@ export function setupMenuListeners(): void {
       refreshForgeUI();
     });
   });
+}
+
+/**
+ * The diagnostics control is hidden entirely on builds with no telemetry
+ * endpoint configured — offering a toggle for something that sends nothing
+ * would be misleading in both directions.
+ */
+function updateTelemetryUI(): void {
+  const section = document.getElementById('telemetry-section') as HTMLElement | null;
+  const btn = document.getElementById('telemetry-toggle-btn') as HTMLButtonElement | null;
+  if (!section || !btn) return;
+  const configured = !!(import.meta.env.VITE_TELEMETRY_URL as string | undefined);
+  section.style.display = configured ? 'block' : 'none';
+  btn.innerText = `Diagnostics: ${isTelemetryEnabled() ? 'On' : 'Off'}`;
 }
 
 function switchSettingsTab(tab: 'audio' | 'visual' | 'access'): void {

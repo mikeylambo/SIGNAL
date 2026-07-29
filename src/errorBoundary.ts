@@ -1,19 +1,33 @@
-// Structured client-side error logger.
-// TODO: replace console.error calls with a fetch() to a real telemetry endpoint.
+import { trackError, track, initTelemetry } from './telemetry';
+
+// Structured client-side error logger. Errors go to the console as before AND
+// to telemetry, which is inert unless VITE_TELEMETRY_URL is configured and the
+// player hasn't opted out.
 export function initErrorBoundary(): void {
   window.onerror = (message, source, line, col, error) => {
     console.error('[SIGNAL] Uncaught error', { message, source, line, col, stack: error?.stack });
+    trackError('error', String(message), error?.stack);
     return false; // don't suppress default browser handling
   };
 
   window.addEventListener('unhandledrejection', (e) => {
     console.error('[SIGNAL] Unhandled promise rejection', { reason: e.reason });
+    const reason = e.reason as { message?: string; stack?: string } | string | undefined;
+    const message = typeof reason === 'string' ? reason : reason?.message ?? 'unknown';
+    const stack = typeof reason === 'object' ? reason?.stack : undefined;
+    trackError('unhandled_rejection', message, stack);
   });
+
+  initTelemetry();
 }
 
 // Call after WebGL/Three.js init fails — shows a readable message instead of
 // a white screen or a raw JS exception in the browser console.
 export function showFatalError(reason: string): void {
+  // The single most important event to capture: the player saw nothing but an
+  // error screen, and by definition cannot report it from inside the game.
+  track('webgl_failed', { reason: reason.slice(0, 200) });
+
   // Remove the Three.js canvas if it was partially created
   const container = document.getElementById('canvas-container');
   if (container) container.innerHTML = '';

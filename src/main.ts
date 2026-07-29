@@ -161,6 +161,16 @@ window.addEventListener('load', () => {
     }
   });
 
+  // Service worker: offline play. Registered after load so it never competes
+  // with first paint, and skipped on localhost dev where a cached shell would
+  // mask code changes behind a stale service worker.
+  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    navigator.serviceWorker.register('/sw.js').catch(err => {
+      // Non-fatal by design: no service worker just means no offline play.
+      console.warn('[SIGNAL] Service worker registration failed', err);
+    });
+  }
+
   // Debug handle for Playwright tests only — stripped by tree-shaking in prod
   // since nothing in the production code path references window.__signal.
   (window as Window & { __signal?: unknown }).__signal = {
