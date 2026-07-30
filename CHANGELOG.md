@@ -7,7 +7,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added — leaderboard abuse controls
+- The anon key ships in the client bundle by design, so every RPC is reachable with `curl`.
+  Ownership checking stopped one player editing another's row and nothing else: a script
+  could mint fresh `player_id`s in a loop and bury every board, or post a perfect-looking
+  score at level 1 and permanently ruin one — including a dated daily board, which is a
+  historical record and cannot be rebuilt.
+- **Score plausibility** (`max_plausible_score`). The old ceiling was a flat 9,999,999,
+  which is not a check so much as an integer bound. The new one is derived from the actual
+  scoring rules — per-hit value, combo/protocol/modifier multipliers, hits per level,
+  level bonuses, Zen's three-completions-per-level — with ~2.5× headroom on top, verified
+  against the theoretical maximum run at every level 1–60 so no honest player is rejected.
+- **`level_reached` is now required** and bounded 1–500. It was optional and unvalidated,
+  which would have made the plausibility check bypassable by simply omitting it.
+- **Rate limiting** (`bump_rate_limit`), per player and per IP, as a fixed window. Sliding
+  windows need a row per event, which is itself write amplification on the path being
+  protected. Claiming a *new* identity is limited per IP specifically, since that is the
+  step an attacker repeats to escape a per-player limit; returning players never hit it, so
+  shared connections are unaffected.
+- The per-player submit cap is **300/hour**, and the reasoning is worth keeping: the binding
+  case is not a long run but a player failing immediately and retrying, a ~15–20s cycle that
+  real frustrated play can push to 180–240/hour. A tighter cap would have punished exactly
+  the player having a bad session. An earlier 120/hour figure was wrong for this reason.
+- `suspicious_scores` surfaces the *improbable* for a human to judge, since submit_score can
+  only reject the *impossible*. Not exposed to anon — a "how close to the limit am I"
+  readout is a calibration aid for cheating.
+- `purge_rate_limits()` for housekeeping. Deliberately not self-scheduling: pg_cron is an
+  extension the owner has to enable, and silently depending on it would mean the cleanup
+  simply never runs on a project that hasn't.
+- Stated plainly, because the boundary matters: this is mitigation, not prevention. A
+  distributed attacker with many IPs still gets through, and a *slightly* inflated score is
+  undetectable without a server-authoritative simulation. It makes single-source flooding
+  and board defacement non-trivial, and caps what any one accepted row can do.
+- `supabase/verify_hardening.sql` asserts all of it against real Postgres, including that
+  the limiter stays latched at its cap — when `bump_rate_limit` raises, PL/pgSQL rolls back
+  its own increment, so the limit holds by *staying at* the maximum rather than exceeding
+  it, and a wrong reset branch would show up as a limiter that quietly reopens.
+
+### Added — CI
+- `.github/workflows/ci.yml`. Until now nothing ran the suite on push; every check was
+  local and by hand.
+- The **web** job type-checks, builds, and then asserts two things about the build that no
+  unit test can: that the Supabase chunk is genuinely in the bundle (~213 kB, not the 1 byte
+  a mis-set build emits), and that a build with no backend env vars still refuses to run. If
+  either regresses, a silently-broken deployment becomes possible again.
+- The **database** job applies `schema.sql` to a Postgres 16 service container **twice** —
+  it is pasted into the Supabase SQL editor by hand and re-run after every change, so
+  idempotency is a property it has to keep — then runs both verification scripts. The schema
+  checks that were previously manual now run on every push.
 
 ---
 

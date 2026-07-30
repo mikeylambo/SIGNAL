@@ -39,6 +39,18 @@ Run a single test by name:
 npx playwright test -g "pause and resume"
 ```
 
+### CI
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+- **web** — `tsc`, production build, then two assertions about the build itself: that the
+  Supabase chunk is really in the bundle (~213 kB, not the 1 byte a mis-set build produces),
+  and that a build with no backend env vars still *refuses* to run. Then the Playwright
+  suite, uploading the report on failure.
+- **database** — applies `supabase/schema.sql` to a Postgres 16 service container twice
+  (it must stay idempotent, since it is re-pasted into the SQL editor by hand), then runs
+  `verify_delete.sql` and `verify_hardening.sql`.
+
 ### If Playwright can't find a browser
 
 Sandboxes and CI images often ship a Chromium that doesn't match the build
@@ -117,7 +129,35 @@ psql -p 55432 -U postgres -d sigtest -v ON_ERROR_STOP=1 -f supabase/verify_delet
 
 `verify_delete.sql` asserts the erasure guarantees: a wrong `owner_secret` is rejected, one
 player's delete can't touch another's rows, a ban survives erasure (so it can't be used for
-ban evasion), and the call is idempotent.
+ban evasion), and the call is idempotent. `verify_hardening.sql` asserts the anti-abuse
+controls below. Both run automatically in CI against Postgres 16.
+
+### Leaderboard abuse controls
+
+The Supabase anon key ships inside the client bundle — that is what it is for, and it means
+every RPC is reachable with `curl`, not only from the game. Ownership checking stops one
+player editing another's row; on its own it stops nothing else. Three controls bound the
+rest:
+
+- **Score plausibility.** `max_plausible_score(level)` derives a ceiling from the real
+  scoring rules (per-hit value, combo and modifier multipliers, hits per level, level
+  bonuses) and leaves roughly 2.5× headroom, so no honest run is ever rejected. A flat
+  9,999,999 cap previously let anyone post a perfect-looking score at level 1 and
+  permanently ruin a board — including dated daily boards, which cannot be rebuilt.
+- **`level_reached` is required** and bounded to 1–500. It was optional and unvalidated,
+  which would have made the plausibility check trivially bypassable.
+- **Rate limiting** (`bump_rate_limit`), counted per player and per IP. The per-player
+  submit cap is 300/hour: the binding case is not a long run but a player repeatedly failing
+  and retrying, which real frustrated play can push to 180–240/hour, so the cap sits above
+  that. Claiming a *new* identity is limited per IP — that is the step an attacker repeats
+  to escape a per-player limit.
+
+This is mitigation, not prevention, and worth being clear about: a distributed attacker with
+many IPs still gets through, and a *slightly* inflated score is not detectable without a
+server-authoritative simulation. What it buys is that single-source flooding and board
+defacement stop being trivial. `select * from suspicious_scores;` surfaces the improbable
+rows for a human to judge; `select purge_rate_limits();` clears spent buckets (schedule it
+with pg_cron if you enable that extension).
 
 ## Privacy and data
 

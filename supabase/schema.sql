@@ -60,6 +60,178 @@ alter table player_identities enable row level security;
 -- Intentionally no policies for anon — this table is only ever touched via the
 -- SECURITY DEFINER functions below, never queried or written directly by clients.
 
+-- ── Rate limiting ────────────────────────────────────────────────────────────
+-- The anon key ships inside the client bundle, by design — it is a public key,
+-- not a secret. So every RPC here is reachable by anyone with curl, not only by
+-- someone running the game. Ownership checking stops one player editing
+-- another's row, but on its own it stops nothing else: a script could mint fresh
+-- player_ids in a loop and bury every board.
+--
+-- Two buckets are counted, because they fail in different ways:
+--   * per player_id — bounds one identity, and catches a looping client.
+--   * per client IP — the one an attacker cannot shed by generating a new UUID.
+--     Supabase/PostgREST exposes request headers through a GUC; outside
+--     PostgREST (psql, tests) that setting simply does not exist, so the helper
+--     degrades to identity-only limiting rather than failing the call.
+--
+-- This is deliberately mitigation, not prevention. A distributed attacker with
+-- many IPs still gets through; what this buys is that casual abuse, a runaway
+-- client, and single-source flooding all stop being trivial, and the score
+-- plausibility check below caps the damage any one accepted row can do.
+create table if not exists rate_limit_buckets (
+  bucket_key   text        primary key,
+  hits         int         not null default 0,
+  window_start timestamptz not null default now()
+);
+alter table rate_limit_buckets enable row level security;
+-- No anon policies: written only by the SECURITY DEFINER helper below.
+
+create index if not exists rate_limit_buckets_window_idx
+  on rate_limit_buckets (window_start);
+
+/**
+ * Fixed-window counter. Raises when p_key exceeds p_max hits within p_window.
+ *
+ * Fixed window rather than sliding: a sliding window needs a row per event,
+ * which is itself a write-amplification vector on the exact path being
+ * protected. The trade-off is that a burst can straddle a window boundary and
+ * briefly see up to 2× p_max. For abuse control that is fine; the limits below
+ * are set well above real play, so the boundary case is still nowhere near
+ * anything a person can produce by hand.
+ */
+create or replace function bump_rate_limit(
+  p_key    text,
+  p_max    int,
+  p_window interval
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_hits int;
+begin
+  if p_key is null then return; end if;
+
+  insert into rate_limit_buckets (bucket_key, hits, window_start)
+  values (p_key, 1, now())
+  on conflict (bucket_key) do update
+    set hits = case
+                 when rate_limit_buckets.window_start < now() - p_window then 1
+                 else rate_limit_buckets.hits + 1
+               end,
+        window_start = case
+                 when rate_limit_buckets.window_start < now() - p_window then now()
+                 else rate_limit_buckets.window_start
+               end
+  returning hits into v_hits;
+
+  if v_hits > p_max then
+    raise exception 'rate limit exceeded — too many requests, try again later';
+  end if;
+end;
+$$;
+
+/**
+ * The caller's IP, or NULL when it cannot be determined.
+ *
+ * `request.headers` is set by PostgREST. In psql it does not exist, and
+ * current_setting(..., true) returns NULL there rather than erroring — which is
+ * why the second argument matters. x-forwarded-for may be a comma-separated
+ * chain; the left-most entry is the original client.
+ */
+create or replace function client_ip()
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_headers text;
+  v_xff     text;
+begin
+  v_headers := current_setting('request.headers', true);
+  if v_headers is null or v_headers = '' then
+    return null;
+  end if;
+  v_xff := (v_headers::json ->> 'x-forwarded-for');
+  if v_xff is null or v_xff = '' then
+    return null;
+  end if;
+  return split_part(v_xff, ',', 1);
+exception
+  when others then
+    -- A malformed header must never take down a score submission.
+    return null;
+end;
+$$;
+
+/**
+ * Upper bound on a believable score for a run that reached p_level.
+ *
+ * Derived from the real scoring rules rather than picked out of the air, then
+ * given wide headroom so no honest player is ever rejected:
+ *
+ *   per hit   = 10 × comboMult × protocolMult × modifierMult
+ *   worst case = 10 × 4 × 1.5 × 1.8 = 108
+ *   hits/level ≤ 10 for grid protocols (activeCount caps at 10), and ≤ 10+level
+ *               for n-Back, whose stream is 10+level long
+ *   level bonus ≤ 200 (Sprint: +100 per clear, two clears per level)
+ *   Zen advances a level every 3 completions, so multiply by 3
+ *
+ * That gives roughly 3 × Σ((10+l)×108 + 200). The constant below sits about 2.5×
+ * above that across the whole plausible range, so the check only ever fires on
+ * scores no run could produce — the 9,999,999-at-level-1 defacement, not a
+ * genuinely excellent player.
+ *
+ * This is what stops one forged row making a board meaningless. It does not try
+ * to detect a *slightly* inflated score; without a server-authoritative
+ * simulation that is not detectable, and pretending otherwise would be worse
+ * than being clear about the boundary.
+ */
+create or replace function max_plausible_score(p_level int)
+returns bigint
+language sql
+immutable
+as $$
+  select (400::bigint * greatest(coalesce(p_level, 1), 1)
+                      * (greatest(coalesce(p_level, 1), 1) + 30));
+$$;
+
+-- These are called from inside SECURITY DEFINER functions, never by the client,
+-- so anon deliberately gets no execute grant. max_plausible_score is granted
+-- because it is useful to a moderator reading the queue, and leaks nothing.
+grant execute on function max_plausible_score to anon;
+grant execute on function max_plausible_score to authenticated;
+
+/**
+ * Drops spent rate-limit rows. The table is keyed per identity and per IP, so
+ * without this it grows forever — every bucket that ever existed, long after its
+ * window closed.
+ *
+ * Not scheduled automatically: pg_cron is an extension the project owner has to
+ * enable, and silently depending on it would mean the cleanup just never runs on
+ * a project that hasn't. Run it from the SQL editor, or schedule it once
+ * pg_cron is on:
+ *   select cron.schedule('signal-rl-gc', '0 * * * *', 'select purge_rate_limits()');
+ */
+create or replace function purge_rate_limits()
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_deleted int;
+begin
+  delete from rate_limit_buckets where window_start < now() - interval '24 hours';
+  get diagnostics v_deleted = row_count;
+  return v_deleted;
+end;
+$$;
+
 create or replace function verify_or_claim_owner(
   p_player_id     uuid,
   p_owner_secret  uuid
@@ -81,6 +253,13 @@ begin
   where player_id = p_player_id;
 
   if existing_secret is null then
+    -- Claiming a NEW identity is the step an attacker repeats to escape a
+    -- per-player limit, so it is rate limited by IP specifically here — on the
+    -- claim path only. Returning players never reach this branch, so a shared
+    -- IP (a household, a school, an office NAT) is unaffected by it; the limit
+    -- is high enough to cover a genuinely busy shared connection anyway.
+    perform bump_rate_limit('claim_ip:' || coalesce(client_ip(), 'unknown'), 40, interval '1 hour');
+
     -- First time this player_id has ever written: claim it for this secret.
     -- ON CONFLICT DO NOTHING covers the race where two calls for a brand-new
     -- player_id land at nearly the same time — whichever inserts first wins,
@@ -174,6 +353,37 @@ begin
     raise exception 'score exceeds maximum (9,999,999)';
   end if;
 
+  -- level_reached: required, and sane. It is what the plausibility bound below
+  -- is measured against, so a null or absurd level would make that check
+  -- meaningless — previously it was optional and unvalidated.
+  if p_level_reached is null or p_level_reached < 1 then
+    raise exception 'level_reached is required and must be >= 1';
+  end if;
+  if p_level_reached > 500 then
+    raise exception 'level_reached exceeds maximum (500)';
+  end if;
+
+  -- Plausibility: a flat 9,999,999 ceiling let anyone post a perfect-looking
+  -- score at level 1 and permanently ruin a board — including a daily board,
+  -- which is a dated historical record and cannot simply be rebuilt. Tying the
+  -- ceiling to the level actually reached makes the forged row have to claim a
+  -- run long enough to be beatable by real play.
+  if p_score > max_plausible_score(p_level_reached) then
+    raise exception 'score % is not achievable at level % (max %)',
+      p_score, p_level_reached, max_plausible_score(p_level_reached);
+  end if;
+
+  -- Submission rate. The binding case for the limit is NOT a long run — it is a
+  -- player who keeps failing immediately and hitting "Run Again". That cycle is
+  -- roughly 15–20s (countdown, a flash, a mistake, the results screen), so real
+  -- frustrated play can reach 180–240 submissions an hour. The cap has to sit
+  -- above that or it punishes exactly the player having a bad session, so 300 —
+  -- five a minute sustained for an hour, which no one does by hand, while a
+  -- looping client still gets bounded. Both buckets are counted because they
+  -- fail differently; see the rate-limiting section above.
+  perform bump_rate_limit('submit:' || p_player_id::text, 300, interval '1 hour');
+  perform bump_rate_limit('submit_ip:' || coalesce(client_ip(), 'unknown'), 1500, interval '1 hour');
+
   insert into leaderboard_scores
     (board_key, player_id, display_name, score, level_reached, protocol, pacing)
   values
@@ -231,6 +441,11 @@ begin
   if is_name_blocked(p_display_name) then
     raise exception 'display_name contains disallowed content';
   end if;
+
+  -- Rate limited harder than submitting: one call rewrites every row the player
+  -- owns across every board, so it is the most write-amplifying RPC here, and
+  -- nobody legitimately renames themselves dozens of times an hour.
+  perform bump_rate_limit('rename:' || p_player_id::text, 20, interval '1 hour');
 
   update leaderboard_scores
   set display_name = trim(p_display_name)
@@ -513,3 +728,24 @@ create or replace view moderation_queue as
   where not r.resolved
   group by r.reported_player_id
   order by count(*) desc;
+
+-- ── Suspicious scores ────────────────────────────────────────────────────────
+-- submit_score() rejects the impossible; this surfaces the merely improbable,
+-- which is the part no rule can decide automatically. `headroom` is the score as
+-- a fraction of what the reached level could plausibly produce — a legitimate
+-- run sits well below 1.0, so rows creeping toward it are the ones worth a look.
+-- Not exposed to anon: it is a moderation tool, and publishing a "how close to
+-- the limit am I" readout would just be a calibration aid for cheating.
+create or replace view suspicious_scores as
+  select
+    s.player_id,
+    s.display_name,
+    s.board_key,
+    s.score,
+    s.level_reached,
+    round(s.score::numeric / nullif(max_plausible_score(s.level_reached), 0), 3) as headroom,
+    s.created_at
+  from leaderboard_scores s
+  where s.level_reached is not null
+    and s.score::numeric / nullif(max_plausible_score(s.level_reached), 0) > 0.35
+  order by (s.score::numeric / nullif(max_plausible_score(s.level_reached), 0)) desc;

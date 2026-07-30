@@ -221,5 +221,9 @@ Suggested order for a store listing — lead with the board, not a menu:
 **After launch**
 
 - [ ] Watch the moderation queue (`select * from moderation_queue`) for the first few days
+- [ ] Watch `select * from suspicious_scores;` — submit_score rejects the impossible, but
+      only a human can judge the merely improbable
+- [ ] Schedule `purge_rate_limits()` (hourly) if you enable pg_cron, or run it occasionally
+      from the SQL editor so spent rate-limit buckets don't accumulate
 - [ ] Keep an eye on whether the daily's protocol rotation lands on 2-Back too often for
       new players — it is the hardest protocol and the daily is many players' first run

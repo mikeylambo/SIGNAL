@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run redundant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Type-check, build, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      # Dummy credentials, not secrets — nothing here ever reaches a real
+      # project. They exist because the build legitimately refuses to run
+      # without them (see vite.config.ts): with no VITE_SUPABASE_URL the
+      # Supabase import is dead-code-eliminated and the bundle ships with no
+      # leaderboard code at all. Building WITH them set is also what makes the
+      # bundle the same shape as production, so the size assertion below is
+      # meaningful.
+      VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Assert the leaderboard SDK is actually in the bundle
+        # Guards a silent, shipped-and-broken failure mode rather than a
+        # hypothetical one: a build without the env vars produces a 1-byte
+        # supabase chunk and a deployment whose leaderboards can never work,
+        # announced only by an easy-to-miss "empty chunk" notice.
+        run: |
+          chunk=$(ls dist/assets/supabase-*.js 2>/dev/null | head -1)
+          if [ -z "$chunk" ]; then
+            echo "::error::No supabase chunk was emitted at all."
+            exit 1
+          fi
+          size=$(stat -c%s "$chunk")
+          echo "supabase chunk: $chunk ($size bytes)"
+          if [ "$size" -lt 100000 ]; then
+            echo "::error::Supabase chunk is only ${size} bytes — the SDK was tree-shaken out, so leaderboards cannot work in this build."
+            exit 1
+          fi
+
+      - name: Verify the build refuses to ship without a backend
+        # The inverse case. If this ever stops failing, the guard has regressed
+        # and a broken build could ship silently again.
+        run: |
+          if env -u VITE_SUPABASE_URL -u VITE_SUPABASE_ANON_KEY npm run build > /dev/null 2>&1; then
+            echo "::error::Build succeeded with no Supabase env vars — the guard in vite.config.ts has regressed."
+            exit 1
+          fi
+          echo "Build correctly refused to run without VITE_SUPABASE_*."
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: npm test
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  database:
+    name: Schema and security checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: sigtest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Create database and Supabase roles
+        # anon and authenticated are created by Supabase, not by schema.sql, so
+        # a bare Postgres needs them before the grants will resolve.
+        run: |
+          psql -d postgres -v ON_ERROR_STOP=1 -c 'create database sigtest;'
+          psql -v ON_ERROR_STOP=1 -c 'create role anon nologin;' -c 'create role authenticated nologin;'
+
+      - name: Apply schema
+        run: psql -v ON_ERROR_STOP=1 -f supabase/schema.sql
+
+      - name: Apply schema again (must be idempotent)
+        # schema.sql is pasted into the Supabase SQL editor by hand and re-run
+        # after every change, so "safe to re-run" is a property it has to keep.
+        run: psql -v ON_ERROR_STOP=1 -f supabase/schema.sql
+
+      - name: Verify erasure guarantees
+        # Wrong owner_secret rejected, no cross-player deletes, bans survive
+        # erasure (no ban evasion), idempotent.
+        run: psql -v ON_ERROR_STOP=1 -f supabase/verify_delete.sql
+
+      - name: Verify leaderboard hardening
+        # Score plausibility bound, required level_reached, rate limiting.
+        run: psql -v ON_ERROR_STOP=1 -f supabase/verify_hardening.sql
