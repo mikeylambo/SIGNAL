@@ -90,6 +90,48 @@ test('the privacy policy page loads standalone and covers the required ground', 
   await expect(body).toContainText('Children');
 });
 
+test('the terms of service page loads standalone and covers the required ground', async ({ page }) => {
+  const res = await page.goto('/terms.html');
+  expect(res?.status()).toBe(200);
+
+  const body = page.locator('body');
+  await expect(body).toContainText('Terms of Service');
+
+  // The clauses that exist because of how THIS game actually works, rather than
+  // boilerplate that would be true of anything.
+  await expect(body).toContainText('no accounts');          // and what that costs the player
+  await expect(body).toContainText('cannot be bought');     // Signal is earned only
+  await expect(body).toContainText('no monetary value');    // virtual currency
+  await expect(body).toContainText('not a medical device'); // pairs with the no-claims copy rule
+  await expect(body).toContainText('Limitation of liability');
+  await expect(body).toContainText('Children');
+
+  // Each policy has to be reachable from the other; a player landing on one
+  // should not have to go hunting for the other. `.first()` because the terms
+  // link to the policy in both the body and the footer.
+  await expect(page.locator('a[href="/privacy.html"]').first()).toBeVisible();
+});
+
+test('both policies are reachable from the Data tab', async ({ page }) => {
+  await seed(page);
+  await openDataTab(page);
+
+  // They open in a new tab on purpose — navigating away would tear down the
+  // WebGL context and cold-boot the game on return. Assert the wiring rather
+  // than the popup, which the harness would have to intercept.
+  await expect(page.locator('#privacy-policy-btn')).toBeVisible();
+  await expect(page.locator('#terms-btn')).toBeVisible();
+
+  const popup = page.waitForEvent('popup');
+  await page.locator('#terms-btn').click();
+  const opened = await popup;
+  expect(new URL(opened.url()).pathname).toBe('/terms.html');
+  await opened.close();
+
+  // The game is still alive behind it, not reloaded.
+  await expect(page.locator('#settings-content-data')).toBeVisible();
+});
+
 test('erasure needs a second tap — one tap only arms it', async ({ page }) => {
   await seed(page);
   await openDataTab(page);

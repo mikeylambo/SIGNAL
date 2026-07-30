@@ -7,6 +7,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added — terms of service
+- **`public/terms.html`.** The privacy policy covered data; nothing covered conduct. With
+  public user-generated content (callsigns), a virtual currency and a planned paid unlock,
+  the terms are what actually grant the right to ban someone and disclaim liability.
+- Written against what the code does, not from a template. The clauses that matter here are
+  the ones a generic template would get wrong:
+  - **No accounts means no recovery.** Stated plainly rather than buried: clear your browser
+    data, switch device, or use private browsing and the save is gone, including the paid
+    unlock. That is a real consequence of the design and players deserve it up front.
+  - **Signal cannot be bought.** It is earned by playing only, has no monetary value, and is
+    non-transferable. Verified against the code — `addSignal` is called from exactly one
+    place, at the end of a run.
+  - **The unlock never buys advantage.** Every protocol, pacing, modifier, the daily and the
+    leaderboards stay free, and it says so, matching the boundary already stated in
+    `entitlements.ts`.
+  - **Not a medical device.** The strongest possible pairing with the store-copy rule: the
+    game describes tasks studied in cognitive psychology and makes no claim about the player.
+    Also flags flashing lights and points at the reduced-motion setting.
+  - **Bans survive erasure**, restating in plain language what `delete_player_data` enforces
+    in SQL, so the behaviour is disclosed rather than surprising.
+- Linked both ways with the privacy policy, reachable from **Settings → Data**, and
+  precached by the service worker. Cache bumped to `signal-v3`: without it an installed
+  client keeps its v2 cache and never fetches the new page, so the terms would be missing
+  offline for exactly the returning players most likely to look.
+- Opens in a new tab rather than navigating — leaving the page mid-session tears down the
+  WebGL context and cold-boots the game on return.
+- **It is a draft and says so.** The liability, warranty and governing-law clauses need a
+  lawyer before anyone relies on them.
+
+### Added — pre-launch placeholder gate
+- `npm run check:launch` fails while `YOURDOMAIN.com`, `[OPERATOR NAME]` or `[JURISDICTION]`
+  remain in the policy pages or the licence, and prints what each one costs if it ships
+  unfilled.
+- Deliberately **not** in CI. It fails by design until launch day, and wiring it in would
+  mean either a permanently red pipeline or someone disabling the one check whose entire job
+  is to be noticed.
+
 ### Added — cross-browser and mobile test coverage
 - The suite ran on **Desktop Chrome only**, in a game that is mobile-first and leans on
   WebGL, Web Audio, touch and service workers — the four things most likely to differ per

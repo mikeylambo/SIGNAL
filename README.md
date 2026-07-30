@@ -30,7 +30,8 @@ game is unaffected. You only need credentials to exercise leaderboards.
 | `npm run dev` | Vite dev server at `http://localhost:5173` |
 | `npm run build` | `tsc` + production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle locally |
-| `npm test` | Playwright suite (77 tests across 4 browser projects) |
+| `npm test` | Playwright suite (79 tests across 4 browser projects) |
+| `npm run check:launch` | Pre-launch gate: fails while any placeholder is unfilled |
 | `npx tsc --noEmit` | Type-check only |
 
 Run a single test by name:
@@ -202,8 +203,12 @@ with pg_cron if you enable that extension).
 ## Privacy and data
 
 `public/privacy.html` is the published policy, and it is accurate to what the code does —
-if you change what is collected, change it there too. In-game, **Settings → Data** shows the
-same disclosure and holds the erasure control (`delete_player_data`).
+if you change what is collected, change it there too. `public/terms.html` is the terms of
+service, written against the same standard: it describes the actual model (no accounts, so
+no recovery; Signal is earned and cannot be bought; the unlock buys appearance, never
+advantage). In-game, **Settings → Data** links both and holds the erasure control
+(`delete_player_data`). Both pages are precached by the service worker, since a policy that
+needs a connection isn't reachable when an offline player goes looking for it.
 
 There are no cookies, no third-party trackers, no ads, and no accounts. Two `localStorage`
 keys (`sig_profile_v1`, `sig_telemetry_id`) and, only if you post a score, one leaderboard
@@ -228,7 +233,15 @@ Placeholders that must be replaced before going public — each is deliberately 
 the rendered output rather than hidden in a comment, so shipping without filling them in is
 obvious:
 
+Run `npm run check:launch` to see what is still outstanding — it exits non-zero while any
+placeholder remains. It is deliberately not in CI: it fails by design until launch day, and
+a permanently red pipeline is one people learn to ignore.
+
 - [ ] `public/privacy.html` — `YOURDOMAIN.com`, `[OPERATOR NAME]`, and the "Last updated" date
+- [ ] `public/terms.html` — `YOURDOMAIN.com`, `[OPERATOR NAME]`, `[JURISDICTION]`, and the date
+- [ ] **Have a lawyer read `public/terms.html`** — it was written to match what the code
+      actually does, but the liability, warranty and governing-law clauses are not something
+      to ship unreviewed
 - [ ] `LICENSE` — `[OPERATOR NAME]`
 - [ ] Create the `privacy@` mailbox and confirm mail arrives
 - [ ] Set `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` on the host

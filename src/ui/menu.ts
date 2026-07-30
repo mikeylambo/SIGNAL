@@ -683,10 +683,13 @@ export function setupMenuListeners(): void {
     resetDeleteDataControl();
   });
   document.getElementById('close-forge-btn-data')!.addEventListener('click', returnToMenu);
+  // New tab, not a navigation: leaving the page mid-session would tear down the
+  // WebGL context and drop the player back to a cold boot on return.
   document.getElementById('privacy-policy-btn')!.addEventListener('click', () => {
-    // New tab, not a navigation: leaving the page mid-session would tear down the
-    // WebGL context and drop the player back to a cold boot on return.
     window.open('/privacy.html', '_blank', 'noopener');
+  });
+  document.getElementById('terms-btn')!.addEventListener('click', () => {
+    window.open('/terms.html', '_blank', 'noopener');
   });
   wireDeleteDataControl();
   document.getElementById('keyboard-help-btn')!.addEventListener('click', showKeyboardHelp);

@@ -192,8 +192,12 @@ Suggested order for a store listing — lead with the board, not a menu:
 
 **Before the first deploy**
 
+- [ ] `npm run check:launch` — exits non-zero while any placeholder is unfilled
 - [ ] Replace `YOURDOMAIN.com`, `[OPERATOR NAME]` and the "Last updated" date in
       `public/privacy.html`
+- [ ] Replace `YOURDOMAIN.com`, `[OPERATOR NAME]`, `[JURISDICTION]` and the date in
+      `public/terms.html`
+- [ ] Have a lawyer review `public/terms.html` before relying on it
 - [ ] Replace `[OPERATOR NAME]` in `LICENSE`
 - [ ] Create the `privacy@` mailbox and send a test message to it
 - [ ] Apply `supabase/schema.sql` to the production project
@@ -204,7 +208,7 @@ Suggested order for a store listing — lead with the board, not a menu:
 
 **Deploy**
 
-- [ ] `npx tsc --noEmit && npm test` — expect 77 passing (63 chromium + cross-browser subset)
+- [ ] `npx tsc --noEmit && npm test` — expect 79 passing (65 chromium + cross-browser subset)
 - [ ] Deploy, then confirm `dist/assets/supabase-*.js` is ~213 kB and **not** 1 byte
       (a 1-byte chunk means the env vars were missing and leaderboards cannot work)
 - [ ] Narrow `connect-src` in `vercel.json` to your Supabase origin, and redeploy
@@ -215,7 +219,7 @@ Suggested order for a store listing — lead with the board, not a menu:
 - [ ] Rename your callsign and confirm it changes on boards you already appear on
 - [ ] Delete your leaderboard data and confirm the row disappears
 - [ ] Load once, go offline, reload — the game should still boot
-- [ ] Check `/privacy.html` renders and has no `YOURDOMAIN` left in it
+- [ ] Check `/privacy.html` and `/terms.html` render and have no `YOURDOMAIN` left in them
 - [ ] Install to a home screen and confirm it launches without browser chrome
 
 **After launch**

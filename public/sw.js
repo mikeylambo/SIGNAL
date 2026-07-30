@@ -24,10 +24,13 @@
  *    and score submissions must not be replayed.
  */
 
-// Bumped to v2: v1 could have stored a non-shell page in the SHELL slot (see the
+// v2: v1 could have stored a non-shell page in the SHELL slot (see the
 // navigation handler), and the activate step drops old caches, so the bump is
 // what actually clears a poisoned entry from an already-installed client.
-const CACHE_VERSION = 'signal-v2';
+// v3: adds /terms.html to PRECACHE. Without a bump, an already-installed client
+// keeps its v2 cache and never fetches the new page, so the terms would be
+// missing offline for exactly the returning players most likely to look.
+const CACHE_VERSION = 'signal-v3';
 const SHELL = '/index.html';
 
 // Kept small on purpose: only what's needed to boot offline. Hashed JS is
@@ -35,9 +38,10 @@ const SHELL = '/index.html';
 const PRECACHE = [
   '/',
   '/index.html',
-  // Precached because a privacy policy that is only reachable online is not
-  // reachable at the moment an offline player goes looking for it.
+  // Precached because a policy that is only reachable online is not reachable at
+  // the moment an offline player goes looking for it.
   '/privacy.html',
+  '/terms.html',
   '/manifest.webmanifest',
   '/favicon.svg',
   '/icon-192.png',
