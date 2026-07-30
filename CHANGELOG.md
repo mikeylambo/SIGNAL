@@ -7,6 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added — cross-browser and mobile test coverage
+- The suite ran on **Desktop Chrome only**, in a game that is mobile-first and leans on
+  WebGL, Web Audio, touch and service workers — the four things most likely to differ per
+  engine. Four Playwright projects now: `chromium` (full suite), plus `mobile-chrome`,
+  `webkit` and `mobile-safari` running `tests/crossbrowser.spec.ts`.
+- Only the cross-browser spec runs on the extra projects. The other specs cover game rules,
+  which don't vary by engine; running all of them four times would quadruple CI for no new
+  information. The new file tests only what genuinely differs: WebGL context creation, touch
+  input (a separate path from mouse — the board is raycast from pointer coordinates and had
+  no touch coverage at all), the AudioContext autoplay policy (Safari suspends until a real
+  user gesture, so getting it wrong is silent on Apple platforms and fine everywhere else),
+  layout at small viewports, and storage across a reload.
+- **Stated in the file and the README so it can't be misread: `mobile-safari` is not iOS.**
+  Playwright's WebKit on Linux shares the engine with Safari but not the JIT, media stack or
+  GPU path. Passing means "not obviously broken on WebKit", not "works on iPhone". Android
+  is the opposite — `mobile-chrome` is the same Blink/V8 as Chrome on Android, so those
+  results transfer closely.
+- `playwright.config.ts` drops the WebKit projects when `PLAYWRIGHT_CHROMIUM_PATH` is set,
+  since that variable exists precisely because the environment cannot download browsers.
+  Better than failing with "executable doesn't exist" in every sandbox.
+- One finding from writing these: on a 1280×720 desktop viewport the results screen's
+  actions sit ~13px below the fold. Not a defect — `.modal-screen` is deliberately
+  `overflow-y: auto` — so the test asserts the real contract (the actions stay *reachable*,
+  and the modal scrolls rather than the page, which would drag the WebGL canvas) instead of
+  the stricter "everything fits" that the design never promised.
+
 ### Added — leaderboard abuse controls
 - The anon key ships in the client bundle by design, so every RPC is reachable with `curl`.
   Ownership checking stopped one player editing another's row and nothing else: a script

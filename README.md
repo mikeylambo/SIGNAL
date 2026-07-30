@@ -30,7 +30,7 @@ game is unaffected. You only need credentials to exercise leaderboards.
 | `npm run dev` | Vite dev server at `http://localhost:5173` |
 | `npm run build` | `tsc` + production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle locally |
-| `npm test` | Playwright suite (63 tests) |
+| `npm test` | Playwright suite (77 tests across 4 browser projects) |
 | `npx tsc --noEmit` | Type-check only |
 
 Run a single test by name:
@@ -46,10 +46,50 @@ npx playwright test -g "pause and resume"
 - **web** — `tsc`, production build, then two assertions about the build itself: that the
   Supabase chunk is really in the bundle (~213 kB, not the 1 byte a mis-set build produces),
   and that a build with no backend env vars still *refuses* to run. Then the Playwright
-  suite, uploading the report on failure.
+  suite across all four browser projects, uploading the report on failure.
 - **database** — applies `supabase/schema.sql` to a Postgres 16 service container twice
   (it must stay idempotent, since it is re-pasted into the SQL editor by hand), then runs
   `verify_delete.sql` and `verify_hardening.sql`.
+
+### Browser matrix
+
+Four Playwright projects:
+
+| Project | Engine | Runs |
+| --- | --- | --- |
+| `chromium` | Blink | the full suite |
+| `mobile-chrome` | Blink, Pixel 7, touch | `crossbrowser.spec.ts` only |
+| `webkit` | WebKit, desktop | `crossbrowser.spec.ts` only |
+| `mobile-safari` | WebKit, iPhone 14, touch | `crossbrowser.spec.ts` only |
+
+Only `crossbrowser.spec.ts` runs on the non-default projects. The other specs cover game
+rules, which don't vary by engine — running all of them four times would quadruple CI for
+no new signal. That file tests what *does* differ per engine: WebGL context creation, touch
+input, the AudioContext autoplay policy, layout at small viewports, and storage.
+
+```bash
+npx playwright test --project=mobile-safari      # one project
+npx playwright test --project=chromium           # the full suite only
+```
+
+### Testing on real devices
+
+**Android is well covered by `mobile-chrome`.** Chrome on Android is the same Blink/V8 as
+the emulated project, so results transfer closely — what you lose in emulation is real GPU
+behaviour, thermal throttling and true touch latency, not correctness. For a real device:
+enable USB debugging, connect, and open `chrome://inspect#devices` on the desktop to
+inspect and profile the page running on the phone. Playwright can also drive a real device
+over ADB with `_android` (`chromium.launchServer` via `adb`), though `chrome://inspect` is
+usually enough. Note Android WebView (in-app browsers) lags Chrome — if you care about
+links opened inside another app, test that separately.
+
+**iOS is not covered by `mobile-safari`, and it's important not to believe otherwise.**
+Playwright's WebKit on Linux shares the engine with Safari but not the JIT, media stack or
+GPU path. Passing there means "not obviously broken on WebKit"; it does not mean "works on
+iPhone". The things most likely to differ are exactly the things this game leans on — WebGL
+under memory pressure, the AudioContext unlock, PWA install and standalone display, and
+safe-area insets. That needs a real iPhone (Safari → Develop menu from a Mac), or a device
+farm (BrowserStack, Sauce Labs, LambdaTest) if you don't have one.
 
 ### If Playwright can't find a browser
 

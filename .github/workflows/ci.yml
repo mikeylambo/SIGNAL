@@ -72,10 +72,14 @@ jobs:
           fi
           echo "Build correctly refused to run without VITE_SUPABASE_*."
 
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        # WebKit as well as Chromium: the mobile-safari and webkit projects are
+        # the only coverage Apple platforms get, and they cannot run without it.
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Run Playwright tests
+        # All four projects — chromium runs the full suite, the other three run
+        # the cross-browser subset. See playwright.config.ts.
         run: npm test
 
       - uses: actions/upload-artifact@v4

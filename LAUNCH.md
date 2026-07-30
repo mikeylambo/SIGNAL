@@ -204,7 +204,7 @@ Suggested order for a store listing — lead with the board, not a menu:
 
 **Deploy**
 
-- [ ] `npx tsc --noEmit && npm test` — expect 63 passing
+- [ ] `npx tsc --noEmit && npm test` — expect 77 passing (63 chromium + cross-browser subset)
 - [ ] Deploy, then confirm `dist/assets/supabase-*.js` is ~213 kB and **not** 1 byte
       (a 1-byte chunk means the env vars were missing and leaderboards cannot work)
 - [ ] Narrow `connect-src` in `vercel.json` to your Supabase origin, and redeploy
