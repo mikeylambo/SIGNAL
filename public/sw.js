@@ -10,9 +10,12 @@
  * precache manifest to keep in sync.
  *
  * Strategy:
- *  - Navigations: network-first, falling back to the cached shell. A player
- *    with a connection always gets the current build; a player without one
- *    still gets in.
+ *  - Navigations: network-first, cached under their own URL, falling back to
+ *    that URL and only then to the shell. A player with a connection always
+ *    gets the current build; a player without one still gets in.
+ *    Note the per-URL keying: the shell slot is only ever written from a real
+ *    shell navigation. Writing every navigation into it meant a visit to
+ *    /privacy.html became the offline response for the game itself.
  *  - /assets/* (content-hashed by Vite): cache-first. The hash IS the version,
  *    so a cached hit can never be stale.
  *  - Fonts and icons: cache-first, same reasoning — they change by filename.
@@ -21,7 +24,10 @@
  *    and score submissions must not be replayed.
  */
 
-const CACHE_VERSION = 'signal-v1';
+// Bumped to v2: v1 could have stored a non-shell page in the SHELL slot (see the
+// navigation handler), and the activate step drops old caches, so the bump is
+// what actually clears a poisoned entry from an already-installed client.
+const CACHE_VERSION = 'signal-v2';
 const SHELL = '/index.html';
 
 // Kept small on purpose: only what's needed to boot offline. Hashed JS is
@@ -29,6 +35,9 @@ const SHELL = '/index.html';
 const PRECACHE = [
   '/',
   '/index.html',
+  // Precached because a privacy policy that is only reachable online is not
+  // reachable at the moment an offline player goes looking for it.
+  '/privacy.html',
   '/manifest.webmanifest',
   '/favicon.svg',
   '/icon-192.png',
@@ -80,11 +89,23 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((c) => c.put(SHELL, copy)).catch(() => {});
+          if (res && res.status === 200 && res.type === 'basic') {
+            // Keyed by request, so /privacy.html refreshes /privacy.html.
+            const perUrl = res.clone();
+            caches.open(CACHE_VERSION).then((c) => c.put(req, perUrl)).catch(() => {});
+            // The shell slot is written only by an actual shell navigation.
+            if (url.pathname === '/' || url.pathname === SHELL) {
+              const forShell = res.clone();
+              caches.open(CACHE_VERSION).then((c) => c.put(SHELL, forShell)).catch(() => {});
+            }
+          }
           return res;
         })
-        .catch(() => caches.match(SHELL).then((r) => r || caches.match('/'))),
+        // Offline: prefer the page actually asked for, and only fall back to the
+        // shell so a deep link still lands somewhere playable.
+        .catch(() => caches.match(req)
+          .then((hit) => hit || caches.match(SHELL))
+          .then((hit) => hit || caches.match('/'))),
     );
     return;
   }

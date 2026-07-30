@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  BEFORE LAUNCH — three placeholders in this file must be replaced:
+    1. YOURDOMAIN.com   → your real domain (appears in the contact address)
+    2. [OPERATOR NAME]  → the person or company operating SIGNAL
+    3. "Last updated"   → the date you actually publish this
+  Search this file for YOURDOMAIN and [OPERATOR to find every occurrence.
+  The placeholders are deliberately visible in the rendered page rather than
+  hidden in a comment, so shipping without filling them in is obvious.
+  ============================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — SIGNAL</title>
+<meta name="description" content="What SIGNAL stores, what it sends, and how to delete it.">
+<meta name="theme-color" content="#05080D">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  :root {
+    --bg: #05080D;
+    --panel: #0B1118;
+    --text: #DCE6F0;
+    --muted: #7C8DA0;
+    --active: #00E5FF;
+    --edge: rgba(120, 160, 200, 0.18);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 20px 80px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.7;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  a { color: var(--active); }
+  h1 {
+    font-size: 1.6rem; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--active); margin: 0 0 4px;
+  }
+  h2 {
+    font-size: 1.05rem; letter-spacing: 1.5px; text-transform: uppercase;
+    margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--edge);
+  }
+  h3 { font-size: 0.95rem; margin: 22px 0 6px; color: var(--text); }
+  .sub { color: var(--muted); font-size: 0.85rem; margin: 0 0 28px; }
+  .callout {
+    background: var(--panel); border: 1px solid var(--edge);
+    border-left: 3px solid var(--active);
+    padding: 16px 18px; border-radius: 4px; margin: 0 0 28px;
+  }
+  .callout p { margin: 0 0 8px; }
+  .callout p:last-child { margin-bottom: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--edge); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85em; background: rgba(120,160,200,0.12);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  ul { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .scroll { overflow-x: auto; }
+  footer {
+    margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--edge);
+    color: var(--muted); font-size: 0.85rem;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #FFFFFF; --panel: #F4F7FA; --text: #14202C;
+      --muted: #5A6B7C; --active: #0069A8; --edge: rgba(20,32,44,0.14);
+    }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Privacy Policy</h1>
+  <p class="sub">SIGNAL — Cognitive Calibration Engine · Last updated: 30 July 2026</p>
+
+  <div class="callout">
+    <p><strong>The short version.</strong> SIGNAL has no accounts, no sign-up, no ads,
+    no third-party trackers and no cookies. Your progress lives on your own device.</p>
+    <p>Nothing is sent to a server unless you choose to post a score to a leaderboard —
+    and even then it is only a nickname you pick, the score, and a random ID.
+    We never ask for your name, email, phone number or location.</p>
+    <p>You can erase everything the leaderboard holds about you at any time, from inside
+    the game: <strong>Settings → Data → Delete my leaderboard data</strong>.</p>
+  </div>
+
+  <h2>1. Who is responsible</h2>
+  <p>SIGNAL is operated by <strong>[OPERATOR NAME]</strong> ("we", "us"). For anything in
+  this policy, including requests about your data, contact
+  <a href="mailto:privacy@YOURDOMAIN.com">privacy@YOURDOMAIN.com</a>.</p>
+
+  <h2>2. Stored on your device</h2>
+  <p>SIGNAL saves your game to your browser's local storage. This stays on your device,
+  is not transmitted to us, and is not readable by other websites. We cannot see it.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>Key</th><th>Contents</th></tr>
+    <tr>
+      <td><code>sig_profile_v1</code></td>
+      <td>Level and score history, Signal currency, purchases, palettes and materials,
+          settings, streak and daily-challenge state, your chosen callsign, and two random
+          IDs used to claim your leaderboard entries.</td>
+    </tr>
+    <tr>
+      <td><code>sig_telemetry_id</code></td>
+      <td>A single random ID used only to group anonymous diagnostic reports.
+          Created only on builds where diagnostics are configured.</td>
+    </tr>
+  </table>
+  </div>
+  <p>Clearing your browser's site data for SIGNAL erases all of this permanently. Because
+  there is no account, it cannot be recovered or transferred to another device.</p>
+
+  <h2>3. Sent when you post a score</h2>
+  <p>Leaderboards are the only feature that transmits anything you provide, and only at the
+  moment you submit a score. If you never post a score, this section never applies to you.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>Field</th><th>What it is</th></tr>
+    <tr><td>Callsign</td><td>The display name you typed. This is public — every other
+        player can see it. Choose something you are comfortable showing publicly; do not
+        use your real name.</td></tr>
+    <tr><td>Score &amp; level</td><td>The result of the run.</td></tr>
+    <tr><td>Board</td><td>Which protocol, pacing or daily challenge the run belongs to.</td></tr>
+    <tr><td>Player ID</td><td>A random identifier generated on your device. It is not
+        derived from your device, browser or any personal detail, and is not linked to any
+        identity we hold — its only job is to keep one row per player per board.</td></tr>
+    <tr><td>Ownership secret</td><td>A second random value proving that submissions and
+        deletions for that Player ID came from your device. Never displayed to anyone.</td></tr>
+    <tr><td>Timestamp</td><td>When the score was set.</td></tr>
+  </table>
+  </div>
+  <p>If you report another player's callsign, we store the reported ID, the reported name,
+  and your Player ID as the reporter, so the same report cannot be filed repeatedly. This is
+  used only to review names against our content rules.</p>
+
+  <h2>4. Diagnostics</h2>
+  <p>Some builds of SIGNAL send anonymous crash and usage reports, so we can find out that
+  the game is broken on a device without needing the player to tell us. Where this is
+  enabled you can switch it off in <strong>Settings → Access → Diagnostics</strong>. It is
+  active by default on those builds; if you would rather it never ran, turn it off and it
+  will send nothing further.</p>
+  <p>A report contains: a random install ID (deliberately <em>different</em> from your
+  leaderboard Player ID, so diagnostics cannot be matched to a public leaderboard row), your
+  browser's user-agent string, your language setting, your screen pixel ratio and CPU core
+  count, a coarse size bucket (<code>sm</code>/<code>md</code>/<code>lg</code> — never your
+  exact window size, which would be a fingerprinting vector), which events occurred
+  (session start, run start, run end, WebGL failure, error), and for errors a truncated
+  message and stack trace.</p>
+  <p>It never contains your callsign, your leaderboard IDs, your progress, or any text you
+  typed.</p>
+
+  <h2>5. What we never collect</h2>
+  <ul>
+    <li>No name, email address, phone number or postal address.</li>
+    <li>No password — there is nothing to log in to.</li>
+    <li>No GPS or precise location. No IP-based location lookup.</li>
+    <li>No contacts, photos, camera, microphone or file access.</li>
+    <li>No advertising identifiers. No ad networks. No advertising profiles.</li>
+    <li>No cookies, and no third-party analytics, social or tracking scripts.</li>
+    <li>No health or medical data. SIGNAL is a game, not a medical or diagnostic tool,
+        and makes no claim to assess or improve any medical condition.</li>
+  </ul>
+
+  <h2>6. Who else processes it</h2>
+  <p>We do not sell, rent or share your data, and we do not use it for advertising. Two
+  service providers process it on our behalf, only to run the game:</p>
+  <ul>
+    <li><strong>Supabase</strong> — hosts the leaderboard database.</li>
+    <li><strong>Vercel</strong> — serves the game itself. Like any web host it processes
+        your IP address in order to deliver the page and to keep standard server logs;
+        we do not use those logs to build any profile of you.</li>
+  </ul>
+  <p>These providers may store or process data in countries other than your own, including
+  the United States. Where required, such transfers rely on the European Commission's
+  Standard Contractual Clauses.</p>
+  <p>We may also disclose data where the law genuinely requires it.</p>
+
+  <h2>7. Why we are allowed to hold it (UK/EU GDPR)</h2>
+  <ul>
+    <li><strong>Leaderboard entries — consent.</strong> Nothing is posted unless you choose
+        to post it. You withdraw that consent by deleting your data, as below.</li>
+    <li><strong>Diagnostics — legitimate interest</strong> in a game that does not crash,
+        balanced by keeping the data anonymous and giving you an off switch.</li>
+    <li><strong>Reports and bans — legitimate interest</strong> in keeping public callsigns
+        free of abusive content.</li>
+  </ul>
+
+  <h2>8. How long it is kept</h2>
+  <p>Leaderboard entries are kept while the board exists, because a leaderboard's purpose is
+  to be a lasting record — or until you delete them. Daily-challenge boards are historical
+  records and are not automatically purged. Reports are kept until reviewed, then closed.
+  Diagnostic reports are retained for up to 90 days. Anything on your device stays until you
+  clear it.</p>
+
+  <h2>9. Your rights and how to use them</h2>
+  <h3>Delete your leaderboard data — immediately, yourself</h3>
+  <p>In the game: <strong>Settings → Data → Delete my leaderboard data</strong>. This removes
+  your callsign and scores from every leaderboard and forgets the stored identity. It takes
+  effect at once and cannot be undone. Your offline progress, Signal and purchases are kept —
+  clear your browser's site data if you want those gone too.</p>
+  <p>One exception, stated plainly: if an account has been banned for abusive content, the ban
+  record — a random ID and a moderator note, with nothing you supplied — is kept after
+  erasure. Otherwise deleting your data would double as a way to reset a ban.</p>
+  <h3>Change your callsign</h3>
+  <p><strong>Stats → Change callsign</strong> renames you on every board you appear on.</p>
+  <h3>Everything else</h3>
+  <p>Depending on where you live you may also have the right to access, correct, export or
+  restrict use of your data, to object to processing, and not to be subject to automated
+  decision-making (we do not do any). Because SIGNAL holds no account and no contact detail
+  for you, we identify your records by the Player ID your device holds — so please email
+  <a href="mailto:privacy@YOURDOMAIN.com">privacy@YOURDOMAIN.com</a> from a device that has
+  played, and we will explain how to supply it. We reply within 30 days.</p>
+  <p>If you are in the UK or EU and are unhappy with our response, you may complain to your
+  national data protection authority (in the UK, the Information Commissioner's Office).</p>
+  <p>California residents: we do not sell or share personal information as those terms are
+  defined by the CCPA/CPRA, and we will not discriminate against you for exercising any right.</p>
+
+  <h2>10. Children</h2>
+  <p>SIGNAL is not directed to children under 13, and we do not knowingly collect personal
+  information from them. The only thing a child could submit is a chosen callsign; if you
+  believe one has been posted, email us and we will remove it. Because a callsign is shown
+  publicly, we would encourage any younger player not to use their real name.</p>
+
+  <h2>11. Security</h2>
+  <p>Leaderboard traffic is encrypted in transit (HTTPS). Writes go through server-side
+  functions that verify your device's ownership secret, so one player cannot alter or delete
+  another's entry. No system is perfectly secure, but note that a breach could not expose a
+  password or an email address, because we never hold either.</p>
+
+  <h2>12. Changes to this policy</h2>
+  <p>If we change this policy we will update the date at the top. If a change materially
+  affects what we collect or why, we will surface a notice in the game rather than relying on
+  you to re-read this page.</p>
+
+  <footer>
+    Questions or requests: <a href="mailto:privacy@YOURDOMAIN.com">privacy@YOURDOMAIN.com</a><br>
+    <a href="/">← Back to SIGNAL</a>
+  </footer>
+
+</div>
+</body>
+</html>

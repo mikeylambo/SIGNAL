@@ -1096,3 +1096,33 @@ test('audio store copy makes no cognitive-benefit claims', async ({ page }) => {
   expect(txt).toContain('Binaural Layer');
   expect(txt).toContain('Pulse Layer');
 });
+
+test('page metadata makes no cognitive-benefit claims either', async ({ page }) => {
+  // The same rule the shop copy follows has to hold for the metadata, which is
+  // what a store listing, a search result and a shared link actually surface.
+  // These descriptions previously promised to "Sharpen your working memory" and
+  // to "Master working memory" — outcome claims about the player, which is the
+  // shape that draws a rejection.
+  await page.goto('/');
+
+  const metas = await page.evaluate(() => ({
+    description: document.querySelector('meta[name="description"]')?.getAttribute('content') ?? '',
+    og:          document.querySelector('meta[property="og:description"]')?.getAttribute('content') ?? '',
+    twitter:     document.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ?? '',
+  }));
+
+  // Verbs that take the player's mind as their object.
+  const claims = [
+    'sharpen', 'improve your', 'boost', 'enhance your', 'train your brain',
+    'master working memory', 'scientifically proven', 'clinically',
+  ];
+  for (const [where, text] of Object.entries(metas)) {
+    expect(text, `${where} must not be empty`).not.toBe('');
+    for (const claim of claims) {
+      expect(text.toLowerCase(), `${where} should not claim "${claim}"`).not.toContain(claim);
+    }
+  }
+
+  // Still describes the game, rather than being emptied out to pass.
+  expect(metas.description.toLowerCase()).toContain('memory game');
+});

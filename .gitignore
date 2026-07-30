@@ -19,6 +19,10 @@ dist/
 test-results/
 playwright-report/
 
+# Generated store/press screenshots — regenerate with scripts/screenshots.mjs
+# rather than committing 3 MB of art that goes stale on the next art change.
+screenshots/
+
 # macOS
 .DS_Store
 

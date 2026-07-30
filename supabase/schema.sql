@@ -241,6 +241,68 @@ $$;
 grant execute on function update_display_name to anon;
 grant execute on function update_display_name to authenticated;
 
+-- ── delete_player_data ───────────────────────────────────────────────────────
+-- Right to erasure. Every other write path here only ever *adds* a player to the
+-- backend; without this, a player who typed a callsign onto a public board had
+-- no way to take it back, which is a data-protection obligation (GDPR Art. 17 /
+-- CCPA) and not merely a nice-to-have.
+--
+-- Deletes the player's scores on every board and forgets the identity itself, so
+-- nothing player-supplied survives the call.
+--
+-- Two deliberate choices:
+--  * owner_secret is verified first, so one player cannot erase another. This is
+--    the same gate submit_score() uses — the only proof of ownership that exists
+--    in an account-less design.
+--  * A `banned_players` row is deliberately NOT removed. Otherwise erasure
+--    doubles as a ban-evasion button: delete, and the ban is gone. A ban row
+--    holds only a random player_id and a moderator note, never player-supplied
+--    content, so keeping it erases everything personal while preserving the
+--    moderation decision.
+--
+-- Idempotent: erasing an identity that holds no rows succeeds and reports 0.
+create or replace function delete_player_data(
+  p_player_id     uuid,
+  p_owner_secret  uuid
+)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_deleted int;
+begin
+  perform verify_or_claim_owner(p_player_id, p_owner_secret);
+
+  delete from leaderboard_scores where player_id = p_player_id;
+  get diagnostics v_deleted = row_count;
+
+  -- Reports have to go as well, and specifically because of `reported_name`:
+  -- it stores a *copy* of the display name at report time, so deleting only
+  -- leaderboard_scores would leave the erased callsign sitting in this table.
+  -- Reports the player filed against others go too, since those carry their id.
+  -- That does cost a little moderation signal — a report count can drop when a
+  -- reporter erases themselves — but a report is a soft signal that rebuilds,
+  -- whereas retaining identifiers of a player who asked to be forgotten is the
+  -- thing erasure exists to prevent. Bans, which carry no player-supplied text,
+  -- are kept (see above).
+  delete from player_reports
+   where reported_player_id = p_player_id
+      or reporter_player_id = p_player_id;
+
+  -- Erasing the identity last: verify_or_claim_owner() reads it, and dropping it
+  -- earlier in the same transaction would let a concurrent call re-claim the id
+  -- with a different secret.
+  delete from player_identities where player_id = p_player_id;
+
+  return v_deleted;
+end;
+$$;
+
+grant execute on function delete_player_data to anon;
+grant execute on function delete_player_data to authenticated;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Moderation
 -- ═══════════════════════════════════════════════════════════════════════════

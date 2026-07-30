@@ -7,6 +7,87 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+Nothing yet.
+
+---
+
+## [1.0.0] — 2026-07-30
+
+First public release. Everything below this heading shipped in it.
+
+### Added — privacy and data rights
+- **A privacy policy** (`public/privacy.html`), written against what the code actually does
+  rather than from a template: the two `localStorage` keys by name, the exact leaderboard
+  columns, and the precise telemetry payload. It can state plainly that there are no cookies,
+  no third-party trackers, no ads and no accounts, because there are none. Reachable from
+  **Settings → Data** and precached by the service worker, since a policy that needs a
+  connection isn't reachable at the moment an offline player looks for it.
+- **The right to erasure** — `delete_player_data()` in `supabase/schema.sql`, wired to
+  **Settings → Data → Delete my leaderboard data**. Every other write path only ever *added*
+  a player to the backend; someone who typed a callsign onto a public board had no way to
+  take it back. Two-stage confirm, because it is irreversible and server-side.
+- A player's `reported_name` copies are deleted along with their score rows — erasing only
+  `leaderboard_scores` would have left the callsign sitting in the reports table.
+- **Bans deliberately survive erasure.** Otherwise "delete my data" doubles as a ban-reset
+  button. A ban row holds a random id and a moderator note and nothing the player supplied,
+  so this erases everything personal while keeping the moderation decision.
+- Erasure regenerates the local identity instead of reusing it. Keeping the old `player_id`
+  would silently re-claim the erased identity on the next score submission.
+- Erasure is the **one** leaderboard call that reports failure to the player. The others fail
+  quietly because a lost score is cosmetic; telling someone their data is gone when the
+  request never landed is not.
+- `supabase/verify_delete.sql` asserts the guarantees against a real Postgres — wrong
+  `owner_secret` rejected, one player's delete cannot touch another's rows, ban preserved,
+  idempotent. Verified on PostgreSQL 16, applying `schema.sql` end to end first.
+
+### Fixed — a partial save could wipe a player's profile
+- `migrate()` ran before `load()`'s backfill, so a branch that dereferenced a missing
+  sub-object threw, and `load()`'s catch treated the save as corrupt and **reset the entire
+  profile** — progress, Signal and purchases. The v8→v9 branch guarded `settings` for exactly
+  this reason, but a guard inside one branch only protects saves *below* that version: a save
+  at **v9–v13** with no `settings` skipped it and hit `raw.settings.telemetry` in v13→v14.
+- Fixed by repairing the shape **before** any version branch runs, so the class is gone rather
+  than patched one branch at a time — any future branch can assume its sub-objects exist.
+- `tests/migration.spec.ts` covers v8 through v16 and asserts the player's data *survives*,
+  which is the property that matters. Confirmed the tests fail without the fix.
+
+### Fixed — a build could ship with no leaderboard code at all
+- `getClient()` throws when `VITE_SUPABASE_URL` is missing, and Vite inlines that value at
+  build time — so with no env vars the guard became provably-always-throwing and Rollup
+  dead-code-eliminated the dynamic `import('@supabase/supabase-js')` after it. Measured:
+  a **213 kB** chunk with the vars set, **1 byte** without. The deployment's leaderboards
+  then could not work whatever was configured at runtime, and the only signal was an
+  easy-to-miss "Generated an empty chunk" notice.
+- A Vite plugin now fails the production build instead. Building without a backend is still
+  legitimate, so it is an explicit choice: `SIGNAL_ALLOW_NO_BACKEND=1`.
+
+### Fixed — service worker could serve the wrong page as the game
+- The navigation handler wrote **every** successful navigation into the shell cache slot, so
+  visiting any second page would make that page the offline response for the game itself.
+  Latent with only one page; adding `/privacy.html` would have activated it. Navigations are
+  now cached under their own URL, the shell slot is only written by a real shell navigation,
+  and an offline navigation prefers the page actually requested. Cache bumped to `signal-v2`
+  so an already-installed client drops a poisoned entry.
+
+### Added — release hygiene
+- `README.md`: setup, commands, every environment variable and what happens without it,
+  deploy steps, the Postgres verification recipe, and a pre-launch checklist.
+- `LICENSE`: proprietary, all rights reserved, with third-party dependencies excluded.
+- **Security headers** in `vercel.json` — a Content-Security-Policy plus
+  `Permissions-Policy`, `Cross-Origin-Opener-Policy` and `no-cache` on `/sw.js`. Verified
+  against the real production bundle behind the actual headers: game boots, service worker
+  registers, zero violations on both routes. `connect-src` stays `'self' https:` because the
+  Supabase origin is only known at build time; narrowing it is noted in the README.
+- Display names were already escaped everywhere they reach `innerHTML`, so the CSP is
+  defence-in-depth rather than a fix.
+- `tests/resilience.spec.ts` covers the paths a player cannot self-diagnose: WebGL denied
+  gives a readable error and no uncaught exception, an unreachable leaderboard says so
+  instead of claiming the board is empty, and a run still reaches its results screen with the
+  backend down.
+- `playwright.config.ts` accepts `PLAYWRIGHT_CHROMIUM_PATH`, so the suite runs in sandboxes
+  and CI images that ship a Chromium which doesn't match the pinned build and cannot download
+  one. `channel` is cleared alongside it, or the channel wins and the run still fails.
+
 ### Changed — economy
 - **The shop no longer sells colour.** Once the Forge shipped eight designed palettes and a full hue
   slider for free, every paid Calibration was a rotation away — that isn't a pricing problem, it's

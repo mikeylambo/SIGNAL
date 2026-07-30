@@ -1,0 +1,26 @@
+Copyright (c) 2026 [OPERATOR NAME]. All rights reserved.
+
+SIGNAL — Cognitive Calibration Engine, including its source code, game design,
+visual design, audio, text and assets (the "Software"), is proprietary and
+confidential.
+
+No licence is granted. In particular, no permission is given to copy, modify,
+merge, publish, distribute, sublicense, sell, or create derivative works from
+the Software, or to host or operate it as a service, in whole or in part,
+without the prior written permission of the copyright holder.
+
+The Software is published in this repository for reference and transparency
+only. Its presence here, and any public availability of the compiled game, does
+not place it in the public domain and does not grant any implied licence.
+
+Third-party dependencies are separate works, licensed under their own terms by
+their respective authors; nothing above applies to them. See the licences
+distributed with each dependency in node_modules, or the "licenses" field of
+each package's metadata.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

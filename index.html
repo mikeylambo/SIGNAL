@@ -4,13 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SIGNAL — Cognitive Calibration Engine</title>
-    <meta name="description" content="SIGNAL is a 3D cognitive training game. Master working memory across 5 protocols and 3 pacing modes with bloom lighting, haptics, and a daily leaderboard challenge.">
+    <!-- Descriptions state what the game IS, never what it does to the player.
+         "Sharpen your working memory" and "master working memory" are outcome
+         promises, and implied cognitive-benefit claims are exactly what Apple and
+         Google reject for an app that cannot substantiate them — the same reason
+         the shop's audio copy was rewritten. Keep this descriptive. -->
+    <meta name="description" content="SIGNAL is a 3D memory game. Watch the pattern, play it back. Five recall protocols, three pacing modes, two modifiers, a daily challenge and shared leaderboards, with bloom lighting and haptics.">
     <meta property="og:title" content="SIGNAL — Cognitive Calibration Engine">
-    <meta property="og:description" content="A 3D memory training game with bloom lighting, haptics, and 5 cognitive protocols. Sharpen your working memory.">
+    <meta property="og:description" content="A 3D memory game: watch the pattern, play it back. Five recall protocols, three pacings, a daily challenge and shared leaderboards.">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="SIGNAL — Cognitive Calibration Engine">
-    <meta name="twitter:description" content="A 3D memory training game with bloom lighting, haptics, and 5 cognitive protocols. Sharpen your working memory.">
+    <meta name="twitter:description" content="A 3D memory game: watch the pattern, play it back. Five recall protocols, three pacings, a daily challenge and shared leaderboards.">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
@@ -533,6 +538,7 @@
                 <button id="settings-tab-audio" class="btn-small settings-tab settings-tab-active" style="flex: 1;">Audio</button>
                 <button id="settings-tab-visual" class="btn-small settings-tab" style="flex: 1;">Visual</button>
                 <button id="settings-tab-access" class="btn-small settings-tab" style="flex: 1;">Access</button>
+                <button id="settings-tab-data" class="btn-small settings-tab" style="flex: 1;">Data</button>
             </div>
 
             <!-- Audio tab -->
@@ -631,6 +637,41 @@
 
                 <div style="display: flex; gap: 10px; margin-top: 14px;">
                     <button id="close-forge-btn-access" class="btn-small" style="flex: 1;">Close</button>
+                </div>
+            </div>
+
+            <!-- Data tab — privacy disclosure and the erasure control.
+                 Its own tab rather than a section inside Access: privacy is not
+                 an accessibility feature, and an erasure path that players
+                 cannot find does not satisfy the obligation it exists to meet.
+                 The summary is inlined rather than living only in the linked
+                 policy so it is still readable offline. -->
+            <div id="settings-content-data" style="display: none;">
+                <div style="text-align: left;">
+                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; letter-spacing: 1px;">WHAT SIGNAL STORES</div>
+                    <div style="font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); line-height: 1.7; margin-bottom: 10px;">
+                        <strong style="color: var(--text);">On this device:</strong> your progress, settings,
+                        purchases and palettes. Never leaves the device unless you post a score.<br>
+                        <strong style="color: var(--text);">On the leaderboard:</strong> only if you post a
+                        score — the callsign you chose, the score, and a random ID. No account, no email.<br>
+                        <strong style="color: var(--text);">Diagnostics:</strong> anonymous crash reports,
+                        off unless enabled. Never your callsign or anything you type.
+                    </div>
+                    <button id="privacy-policy-btn" class="btn-small" style="width: 100%; margin-bottom: 10px;">Read privacy policy</button>
+                </div>
+
+                <div style="text-align: left; margin-top: 18px; border-top: 1px solid var(--edge); padding-top: 14px;">
+                    <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; letter-spacing: 1px;">DELETE LEADERBOARD DATA</div>
+                    <div style="font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 10px;">
+                        Removes your callsign and scores from every leaderboard, permanently.
+                        Your local progress, Signal and purchases are kept.
+                    </div>
+                    <button id="delete-data-btn" class="btn-small" style="width: 100%; margin-bottom: 8px;">Delete my leaderboard data</button>
+                    <div id="delete-data-status" role="status" aria-live="polite" style="font-family: var(--font-mono); font-size: 0.68rem; line-height: 1.6; min-height: 1.2em; color: var(--text-muted);"></div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 14px;">
+                    <button id="close-forge-btn-data" class="btn-small" style="flex: 1;">Close</button>
                 </div>
             </div>
         </div>

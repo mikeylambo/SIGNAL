@@ -13,7 +13,7 @@ import { returnToMenu, updateReducedMotionText, pauseGame } from './modals';
 import { toggleReducedMotion } from '../reducedMotion';
 import { initGame, startOnboardingRound } from '../game/runLoop';
 import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
-import { setDisplayName } from '../game/leaderboard';
+import { setDisplayName, deletePlayerData } from '../game/leaderboard';
 import { renderMasteryList } from '../progression';
 import { BOARD_MATERIALS, isMaterialUnlocked, buyMaterial, setActiveMaterial, getMaterial } from '../materials';
 import { hasPremium, isPremiumOfferAvailable, PREMIUM_BENEFITS, paletteSlotCount } from '../entitlements';
@@ -678,6 +678,17 @@ export function setupMenuListeners(): void {
     updateTelemetryUI();
   });
   document.getElementById('close-forge-btn-access')!.addEventListener('click', returnToMenu);
+  document.getElementById('settings-tab-data')!.addEventListener('click', () => {
+    switchSettingsTab('data');
+    resetDeleteDataControl();
+  });
+  document.getElementById('close-forge-btn-data')!.addEventListener('click', returnToMenu);
+  document.getElementById('privacy-policy-btn')!.addEventListener('click', () => {
+    // New tab, not a navigation: leaving the page mid-session would tear down the
+    // WebGL context and drop the player back to a cold boot on return.
+    window.open('/privacy.html', '_blank', 'noopener');
+  });
+  wireDeleteDataControl();
   document.getElementById('keyboard-help-btn')!.addEventListener('click', showKeyboardHelp);
   document.getElementById('telemetry-toggle-btn')!.addEventListener('click', () => {
     setTelemetryEnabled(!(profile.settings.telemetry !== false));
@@ -780,6 +791,86 @@ export function setupMenuListeners(): void {
   });
 }
 
+// ── Leaderboard data erasure ───────────────────────────────────────────────────
+// Two-stage confirm rather than a one-tap button: the action is irreversible and
+// server-side, so a mis-tap must not be able to complete it. Deliberately not
+// window.confirm() — it is blocked in some embedded webviews, which would make
+// erasure silently unreachable exactly where it is hardest to explain.
+
+/** True once the player has armed the button and must tap again to commit. */
+let deleteDataArmed = false;
+
+function setDeleteStatus(msg: string, tone: 'muted' | 'warn' | 'ok' | 'err' = 'muted'): void {
+  const el = document.getElementById('delete-data-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color =
+    tone === 'warn' ? '#FFB800' :
+    tone === 'ok'   ? 'var(--correct)' :
+    tone === 'err'  ? 'var(--wrong)' :
+                      'var(--text-muted)';
+}
+
+/**
+ * Returns the control to its resting state. Called on every open of the tab so a
+ * player who armed the button, navigated away and came back does not find a
+ * live one-tap delete waiting for them.
+ */
+function resetDeleteDataControl(): void {
+  deleteDataArmed = false;
+  const btn = document.getElementById('delete-data-btn') as HTMLButtonElement | null;
+  if (btn) {
+    btn.disabled = false;
+    btn.innerText = 'Delete my leaderboard data';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+  setDeleteStatus('');
+}
+
+function wireDeleteDataControl(): void {
+  const btn = document.getElementById('delete-data-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+
+  btn.addEventListener('click', () => {
+    if (!deleteDataArmed) {
+      deleteDataArmed = true;
+      btn.innerText = 'Tap again to confirm';
+      btn.style.color = 'var(--wrong)';
+      btn.style.borderColor = 'var(--wrong)';
+      setDeleteStatus('This cannot be undone.', 'warn');
+      return;
+    }
+
+    // Committed. Disable immediately so a double-tap can't fire two requests.
+    btn.disabled = true;
+    btn.innerText = 'Deleting…';
+    setDeleteStatus('Contacting the leaderboard…');
+
+    void deletePlayerData()
+      .then((removed) => {
+        btn.innerText = 'Deleted';
+        setDeleteStatus(
+          removed > 0
+            ? `Removed from ${removed} leaderboard${removed === 1 ? '' : 's'}. Your local progress is untouched.`
+            : 'Nothing to remove — you had no leaderboard entries.',
+          'ok',
+        );
+      })
+      .catch((err) => {
+        // Erasure is the one leaderboard call whose failure must be visible:
+        // a silent failure here tells the player their data is gone when it is not.
+        console.warn('[settings] deletePlayerData failed:', err);
+        btn.disabled = false;
+        deleteDataArmed = false;
+        btn.innerText = 'Delete my leaderboard data';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+        setDeleteStatus('Could not reach the leaderboard. Nothing was deleted — try again.', 'err');
+      });
+  });
+}
+
 /**
  * The diagnostics control is hidden entirely on builds with no telemetry
  * endpoint configured — offering a toggle for something that sends nothing
@@ -794,16 +885,18 @@ function updateTelemetryUI(): void {
   btn.innerText = `Diagnostics: ${isTelemetryEnabled() ? 'On' : 'Off'}`;
 }
 
-function switchSettingsTab(tab: 'audio' | 'visual' | 'access'): void {
+function switchSettingsTab(tab: 'audio' | 'visual' | 'access' | 'data'): void {
   const panes: Record<string, string> = {
     audio:  'settings-content-audio',
     visual: 'settings-content-visual',
     access: 'settings-content-access',
+    data:   'settings-content-data',
   };
   const tabs: Record<string, string> = {
     audio:  'settings-tab-audio',
     visual: 'settings-tab-visual',
     access: 'settings-tab-access',
+    data:   'settings-tab-data',
   };
   for (const key of Object.keys(panes)) {
     const pane = document.getElementById(panes[key]);

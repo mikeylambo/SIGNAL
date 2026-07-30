@@ -159,6 +159,49 @@ export async function reportPlayer(reportedPlayerId: string): Promise<boolean> {
   }
 }
 
+// ── Erasure ────────────────────────────────────────────────────────────────────
+
+/**
+ * Deletes everything the backend holds for this player: their rows on every
+ * board, any reports referencing them, and the stored identity itself.
+ *
+ * This is the player's right-to-erasure path, and it is the one leaderboard call
+ * that deliberately **does** report failure to the caller. Every other function
+ * here fails quietly because a lost score is a cosmetic loss; telling someone
+ * their data is gone when the request never landed is not cosmetic, so the UI
+ * needs a real result to show.
+ *
+ * After a successful delete the local leaderboard identity is regenerated rather
+ * than reused: keeping the old `player_id` would silently re-claim the erased
+ * identity on the next submit, quietly resurrecting the association the player
+ * just asked to remove. `display_name` is cleared too, so the next submission
+ * prompts for a callsign like a fresh install.
+ *
+ * Resolves the number of score rows removed, or rejects with a reportable error.
+ */
+export async function deletePlayerData(): Promise<number> {
+  const { player_id, owner_secret } = profile;
+  // Checked before getClient(): with no identity there is nothing to erase, and
+  // a player in that state should be told "nothing to remove" rather than shown
+  // a connection error from a client they never needed.
+  if (!player_id || !owner_secret) return 0;
+
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc('delete_player_data', {
+    p_player_id:    player_id,
+    p_owner_secret: owner_secret,
+  }).abortSignal(AbortSignal.timeout(FETCH_TIMEOUT_MS));
+
+  if (error) throw error;
+
+  profile.player_id    = crypto.randomUUID();
+  profile.owner_secret = crypto.randomUUID();
+  profile.display_name = '';
+  saveProfile();
+
+  return typeof data === 'number' ? data : 0;
+}
+
 // ── Fetch top scores ───────────────────────────────────────────────────────────
 
 /**

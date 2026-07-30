@@ -62,6 +62,25 @@ const SaveSystem = (() => {
   }
 
   function migrate(raw: SavedProfile): SavedProfile {
+    // Shape repair, before any version branch runs.
+    //
+    // load() already backfills missing sub-objects, but only *after* migrate()
+    // returns — so a branch that dereferences one throws first, and load()'s
+    // catch turns that into a full profile reset: progress, Signal and purchases
+    // all gone. The v8→v9 branch below guards `settings` for exactly this
+    // reason, but a guard inside one branch only protects saves below that
+    // version. A save at v9–v13 with no `settings` skipped v9's guard and hit
+    // v13→v14's `raw.settings.telemetry`, which is the reset path in full.
+    //
+    // Repairing up-front instead of per-branch makes the whole class impossible:
+    // any branch, present or future, can assume its sub-objects exist.
+    if (!raw.settings) {
+      raw.settings = { haptics: true, sfx: true, volume: 0.7, telemetry: true };
+    }
+    if (!raw.lifetime) {
+      raw.lifetime = { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 };
+    }
+
     if (!raw.schemaVersion || raw.schemaVersion < 2) {
       // v1 → v2: build a full palette from the single customHex accent
       raw.customPalette = {
@@ -109,13 +128,9 @@ const SaveSystem = (() => {
       raw.schemaVersion = 8;
     }
     if (raw.schemaVersion < 9) {
-      // v8 → v9: master volume setting.
-      // `settings` predates this branch but a hand-edited or partially-written
-      // save can still arrive without it; reading `.volume` off undefined threw,
-      // and load()'s catch turns any throw into a full profile reset — so a
-      // missing sub-object silently wiped the player's progress instead of
-      // being backfilled.
-      if (!raw.settings) raw.settings = { haptics: true, sfx: true, volume: 0.7, telemetry: true };
+      // v8 → v9: master volume setting. `settings` itself is guaranteed to exist
+      // by the shape repair at the top of migrate(); only the new field needs a
+      // default here.
       if (raw.settings.volume === undefined) raw.settings.volume = 0.7;
       raw.schemaVersion = 9;
     }

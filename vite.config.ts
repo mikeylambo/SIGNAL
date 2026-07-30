@@ -1,6 +1,58 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+
+/**
+ * Fails a production build that would ship with no leaderboard code at all.
+ *
+ * This guards a genuinely silent failure mode. `getClient()` reads
+ * `import.meta.env.VITE_SUPABASE_URL` and throws when it is missing; Vite
+ * inlines that value at build time, so with no env vars the guard becomes
+ * provably-always-throwing and Rollup dead-code-eliminates the dynamic
+ * `import('@supabase/supabase-js')` that follows it. The SDK is then absent from
+ * the bundle entirely — measured: 213 kB chunk with the vars set, 1 byte without
+ * — and the only hint is a "Generated an empty chunk" notice that is easy to
+ * scroll past. The result is a deployment whose leaderboards cannot work no
+ * matter what is configured at runtime, because the code is not there.
+ *
+ * Building without a backend is still legitimate (a fork, or an offline-only
+ * build), so this is an explicit decision rather than a hard block: set
+ * SIGNAL_ALLOW_NO_BACKEND=1 to proceed deliberately.
+ */
+function requireBackendEnv(): Plugin {
+  return {
+    name: 'signal-require-backend-env',
+    apply: 'build',
+    config(_config, { mode }) {
+      // Read from process.env: loadEnv-populated import.meta.env isn't available
+      // here, and Vercel/CI supply these as real environment variables anyway.
+      const url = process.env['VITE_SUPABASE_URL'];
+      const key = process.env['VITE_SUPABASE_ANON_KEY'];
+      if (url && key) return;
+      if (process.env['SIGNAL_ALLOW_NO_BACKEND'] === '1') {
+        console.warn(
+          '\n[SIGNAL] Building with no leaderboard backend (SIGNAL_ALLOW_NO_BACKEND=1).\n' +
+          '         The Supabase SDK will be absent from this bundle and every\n' +
+          '         leaderboard feature will be inert at runtime.\n',
+        );
+        return;
+      }
+      const missing = [!url && 'VITE_SUPABASE_URL', !key && 'VITE_SUPABASE_ANON_KEY']
+        .filter(Boolean).join(', ');
+      throw new Error(
+        `\n[SIGNAL] Refusing to build "${mode}": missing ${missing}.\n\n` +
+        '  Without these the Supabase SDK is dead-code-eliminated out of the\n' +
+        '  bundle, so the leaderboard cannot work in the deployed build even if\n' +
+        '  the variables are set later at runtime.\n\n' +
+        '  Fix: set them in your shell, .env, or your host\'s environment\n' +
+        '  settings (Vercel → Project → Settings → Environment Variables).\n' +
+        '  Intentionally building without a leaderboard? Re-run with\n' +
+        '  SIGNAL_ALLOW_NO_BACKEND=1.\n',
+      );
+    },
+  };
+}
 
 export default defineConfig({
+  plugins: [requireBackendEnv()],
   build: {
     // Three.js + postprocessing is large by design; suppress the warning
     chunkSizeWarningLimit: 1000,
