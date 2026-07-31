@@ -12,7 +12,7 @@ import { test, expect, Page } from '@playwright/test';
 // matters; asserting on the migration's internals would pass even while a reset
 // was happening.
 
-const CURRENT_SCHEMA = 16;
+const CURRENT_SCHEMA = 17;
 
 type Stored = {
   schemaVersion?: number;
@@ -52,7 +52,7 @@ function readProfile(page: Page): Promise<Stored | null> {
 
 // Every version from the one that introduced `settings` through the last one
 // that could still trip over it, plus current. 9–13 were the broken window.
-for (const version of [8, 9, 10, 11, 12, 13, 14, 15, 16]) {
+for (const version of [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) {
   test(`a partial v${version} save migrates without wiping the player`, async ({ page }) => {
     await seedPartial(page, version);
     await page.goto('/');

@@ -7,6 +7,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added — Turnstile attestation on identity creation
+- The rate limits shipped earlier were only as strong as the cost of a new identity, and a
+  `crypto.randomUUID()` costs nothing — so a per-player limit was decorative: mint a new
+  UUID and it resets. **Making a new identity cost a solved challenge is what makes every
+  other limit bind**, which is why this is the highest-leverage control of the set.
+- Three pieces: `src/attestation.ts` (client), `supabase/functions/verify-attestation`
+  (Deno Edge Function that checks the token with Cloudflare), and
+  `claim_identity_attested()` in SQL, which only `service_role` may call.
+- The Cloudflare check has to happen in the Edge Function: a client-side "verified" flag
+  proves nothing since the bundle is editable, and Postgres has no synchronous outbound
+  HTTP (`pg_net` is async) so it cannot make the call inline with the claim.
+- **Enforcement is a database row, not a build flag** (`app_settings.require_attestation`,
+  default `false`). If Cloudflare has a bad day, the fix has to be "flip a row", not "ship a
+  build" — otherwise every new player is locked out until a deploy lands.
+- **Only new identities are gated.** A returning player already has a row and never reaches
+  the claim path, so turning the flag on cannot lock out anyone who has already posted.
+  Asserted explicitly in `verify_hardening.sql`.
+- **Found by the tests, not by reading the code:** `revoke execute … from anon` did nothing,
+  because Postgres grants `EXECUTE` to `PUBLIC` by default and anon inherits it. The gate
+  was one direct RPC call from being bypassed entirely. Fixed with a revoke from `PUBLIC`,
+  and there is now a `has_function_privilege` assertion so it cannot regress.
+- **CSP had to be widened, or the feature would have failed silently.** `script-src 'self'`
+  blocks the Turnstile script outright; `challenges.cloudflare.com` is now allowed in
+  `script-src` and `frame-src`, verified against the real production bundle behind the real
+  headers.
+- **Privacy policy updated to match.** With attestation on, Cloudflare receives an IP and
+  some browser characteristics — so it is now disclosed as a processor, with the conditions
+  stated. Leaving the policy saying "no third parties beyond hosting" would have made it
+  inaccurate the moment the feature was switched on.
+- Inert unless `VITE_TURNSTILE_SITE_KEY` is set, matching telemetry and the purchase button.
+  A test asserts an unconfigured build makes **no third-party request at all**, which is the
+  claim the privacy policy rests on.
+- Never blocks play: a blocked domain, an ad blocker or a refused challenge costs that one
+  leaderboard entry, never the run.
+- Erasure clears the local `attested` flag, since the regenerated identity is unclaimed
+  server-side; leaving it set would make the next submission skip the challenge and then
+  fail the claim, silently.
+- Schema v17 marks existing players attested — they already hold a claimed identity, so
+  challenging them would be friction with nothing behind it.
+
 ### Added — terms of service
 - **`public/terms.html`.** The privacy policy covered data; nothing covered conduct. With
   public user-generated content (callsigns), a virtual currency and a planned paid unlock,

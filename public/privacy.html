@@ -181,6 +181,13 @@
     <li><strong>Vercel</strong> — serves the game itself. Like any web host it processes
         your IP address in order to deliver the page and to keep standard server logs;
         we do not use those logs to build any profile of you.</li>
+    <li><strong>Cloudflare (Turnstile)</strong> — <em>only on builds where it is enabled,
+        and only the first time you post a score.</em> It runs a one-off check that you are
+        a person rather than a script, which is what stops one actor generating thousands of
+        fake identities and burying the leaderboards. Cloudflare receives your IP address
+        and some browser characteristics for that check. Turnstile is deliberately chosen
+        because it does not track people across sites and sets no advertising cookie; if it
+        is not enabled on this build, nothing is loaded from Cloudflare at all.</li>
   </ul>
   <p>These providers may store or process data in countries other than your own, including
   the United States. Where required, such transfers rely on the European Commission's

@@ -30,7 +30,7 @@ game is unaffected. You only need credentials to exercise leaderboards.
 | `npm run dev` | Vite dev server at `http://localhost:5173` |
 | `npm run build` | `tsc` + production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle locally |
-| `npm test` | Playwright suite (79 tests across 4 browser projects) |
+| `npm test` | Playwright suite (82 tests across 4 browser projects) |
 | `npm run check:launch` | Pre-launch gate: fails while any placeholder is unfilled |
 | `npx tsc --noEmit` | Type-check only |
 
@@ -114,6 +114,7 @@ build never phones home by accident.
 | `VITE_SUPABASE_ANON_KEY` | Same as above. |
 | `VITE_TELEMETRY_URL` | Telemetry is fully inert; the Diagnostics toggle is hidden. |
 | `VITE_PURCHASE_PROVIDER` | The premium purchase button is not rendered at all. |
+| `VITE_TURNSTILE_SITE_KEY` | Attestation is fully inert — nothing loads from Cloudflare. |
 | `SIGNAL_ALLOW_NO_BACKEND=1` | Build-time only: permits a deliberate build with no leaderboard. |
 
 ### Why a missing Supabase var fails the build
@@ -192,6 +193,25 @@ rest:
   and retrying, which real frustrated play can push to 180–240/hour, so the cap sits above
   that. Claiming a *new* identity is limited per IP — that is the step an attacker repeats
   to escape a per-player limit.
+
+**Attestation (optional).** Rate limits are only as good as the cost of a new identity, and
+a `crypto.randomUUID()` costs nothing — so per-player limits are decorative until claiming an
+identity is made expensive. With Cloudflare Turnstile configured, creating a *new* identity
+requires a solved challenge: the client gets a token, the `verify-attestation` Edge Function
+checks it with Cloudflare, and only then may `claim_identity_attested()` (service-role only)
+insert the row. Returning players never see a challenge — they already have a row.
+
+Enabling it has a strict order, or new players get locked out:
+
+1. Set `VITE_TURNSTILE_SITE_KEY` and deploy the client.
+2. `supabase functions deploy verify-attestation` and
+   `supabase secrets set TURNSTILE_SECRET_KEY=…`
+3. Only then: `update app_settings set value = 'true' where key = 'require_attestation';`
+
+The flag lives in the database rather than in a build so it can be switched off in seconds
+if Cloudflare has a bad day — the fix must not require a deploy. Cloudflare's test keys
+(`1x00000000000000000000AA` always passes, `2x00000000000000000000AB` always blocks) let you
+exercise both paths without a real challenge.
 
 This is mitigation, not prevention, and worth being clear about: a distributed attacker with
 many IPs still gets through, and a *slightly* inflated score is not detectable without a

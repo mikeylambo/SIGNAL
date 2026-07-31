@@ -198,6 +198,63 @@ begin
   end if;
   raise notice 'PASS purge_rate_limits() removed 2 stale buckets and kept the live one';
 
+  -- ── Attestation gate ───────────────────────────────────────────────────────
+  delete from rate_limit_buckets;
+  delete from leaderboard_scores;
+  delete from player_identities;
+
+  -- Default OFF: nothing changes until it is deliberately switched on.
+  if attestation_required() then
+    raise exception 'FAIL: attestation defaults to ON — that would lock out new players on deploy';
+  end if;
+  raise notice 'PASS attestation defaults to off';
+
+  -- An existing player is claimed while the gate is still open.
+  perform submit_score('spatial_classic', p1, s1, 'EXISTING', 5000, 12, 'spatial', 'classic');
+
+  update app_settings set value = 'true' where key = 'require_attestation';
+  if not attestation_required() then
+    raise exception 'FAIL: flag did not take effect';
+  end if;
+
+  -- A brand-new identity can no longer self-claim through the anon path. This is
+  -- the whole point: free identities are what make per-player limits decorative.
+  begin
+    perform submit_score('spatial_classic', p2, s2, 'NEWCOMER', 1000, 5, 'spatial', 'classic');
+    raise exception 'FAIL: a new identity was claimed with attestation required';
+  exception
+    when others then
+      if position('FAIL:' in SQLERRM) > 0 then raise; end if;
+      raise notice 'PASS unattested new identity rejected — %', left(SQLERRM, 45);
+  end;
+
+  -- The player who was already claimed must be unaffected. Turning the flag on
+  -- must never lock out someone who has already posted a score.
+  perform submit_score('rhythm_zen', p1, s1, 'EXISTING', 6000, 13, 'rhythm', 'zen');
+  select count(*) into v_n from leaderboard_scores where player_id = p1;
+  if v_n <> 2 then raise exception 'FAIL: existing player blocked by the gate (% rows)', v_n; end if;
+  raise notice 'PASS an already-claimed player is unaffected by the gate';
+
+  -- The Edge Function path — service_role only — does let a new identity through.
+  perform claim_identity_attested(p2, s2);
+  perform submit_score('spatial_classic', p2, s2, 'NEWCOMER', 1000, 5, 'spatial', 'classic');
+  select count(*) into v_n from leaderboard_scores where player_id = p2;
+  if v_n <> 1 then raise exception 'FAIL: attested claim did not admit the player'; end if;
+  if not exists (select 1 from player_identities where player_id = p2 and attested) then
+    raise exception 'FAIL: identity was not marked attested';
+  end if;
+  raise notice 'PASS an attested claim admits a new player and is recorded as attested';
+
+  -- anon must not be able to call the claim function directly, or the gate is
+  -- one RPC away from being skipped entirely.
+  if has_function_privilege('anon', 'claim_identity_attested(uuid,uuid)', 'execute') then
+    raise exception 'FAIL: anon can execute claim_identity_attested — the gate is bypassable';
+  end if;
+  raise notice 'PASS anon cannot execute claim_identity_attested';
+
+  -- Restore the default so re-running the file is deterministic.
+  update app_settings set value = 'false' where key = 'require_attestation';
+
   -- ── The moderator view resolves ────────────────────────────────────────────
   perform count(*) from suspicious_scores;
   raise notice 'PASS suspicious_scores view resolves';

@@ -56,6 +56,11 @@ create table if not exists player_identities (
   owner_secret uuid not null,
   created_at   timestamptz not null default now()
 );
+-- Whether this identity passed a Turnstile challenge when it was claimed.
+-- Added separately so existing clusters migrate without dropping the table;
+-- identities claimed before attestation existed are legitimately `false`.
+alter table player_identities
+  add column if not exists attested boolean not null default false;
 alter table player_identities enable row level security;
 -- Intentionally no policies for anon — this table is only ever touched via the
 -- SECURITY DEFINER functions below, never queried or written directly by clients.
@@ -232,6 +237,78 @@ begin
 end;
 $$;
 
+-- ── Runtime settings ─────────────────────────────────────────────────────────
+-- Server-side switches, so behaviour can be changed without a client deploy.
+-- That matters most for attestation: if Cloudflare has an outage or the widget
+-- misbehaves on some device, the fix has to be "flip a row" and not "ship a
+-- build", or every new player is locked out of the leaderboard until you can
+-- deploy.
+create table if not exists app_settings (
+  key   text primary key,
+  value text not null
+);
+alter table app_settings enable row level security;
+-- No anon policies: read only from inside SECURITY DEFINER functions.
+
+-- Default OFF. Turn it on only once VITE_TURNSTILE_SITE_KEY is set on the client
+-- AND the verify-attestation function is deployed with its secret — enabling it
+-- before both are true would reject every new player.
+insert into app_settings (key, value)
+values ('require_attestation', 'false')
+on conflict (key) do nothing;
+
+create or replace function attestation_required()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (select value = 'true' from app_settings where key = 'require_attestation'),
+    false);
+$$;
+
+/**
+ * Claims a NEW identity. Callable only by service_role — i.e. only from the
+ * verify-attestation Edge Function, after it has checked the Turnstile token
+ * with Cloudflare. anon deliberately gets no grant: if it did, the attestation
+ * gate would be one direct RPC call away from being skipped entirely.
+ */
+create or replace function claim_identity_attested(
+  p_player_id     uuid,
+  p_owner_secret  uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_player_id is null or p_owner_secret is null then
+    raise exception 'player_id and owner_secret are required';
+  end if;
+
+  -- Still IP-limited. Attestation raises the cost of minting an identity; it
+  -- does not make it free to do so in bulk with a farm of solved challenges.
+  perform bump_rate_limit('claim_attested_ip:' || coalesce(client_ip(), 'unknown'), 40, interval '1 hour');
+
+  insert into player_identities (player_id, owner_secret, attested)
+  values (p_player_id, p_owner_secret, true)
+  on conflict (player_id) do nothing;
+end;
+$$;
+
+-- REVOKE FROM PUBLIC, not just from anon. Postgres grants EXECUTE on a new
+-- function to PUBLIC by default, and anon inherits that — so revoking from anon
+-- alone leaves the function callable by anon anyway, and the whole attestation
+-- gate is one direct RPC call away from being skipped. Caught by
+-- verify_hardening.sql's has_function_privilege check, not by reading the code.
+revoke execute on function claim_identity_attested from public;
+revoke execute on function claim_identity_attested from anon;
+revoke execute on function claim_identity_attested from authenticated;
+grant  execute on function claim_identity_attested to service_role;
+
 create or replace function verify_or_claim_owner(
   p_player_id     uuid,
   p_owner_secret  uuid
@@ -253,6 +330,20 @@ begin
   where player_id = p_player_id;
 
   if existing_secret is null then
+    -- With attestation on, anon cannot self-claim at all: a new identity has to
+    -- come through claim_identity_attested(), which only the Edge Function can
+    -- call and only after Cloudflare has verified a Turnstile token. This is the
+    -- chokepoint — free identities are what make every per-player limit
+    -- decorative, since a fresh UUID resets them.
+    --
+    -- Existing players are unaffected either way: they already have a row, so
+    -- they never reach this branch. Turning the flag on cannot lock out anyone
+    -- who has already posted a score.
+    if attestation_required() then
+      raise exception 'attestation required to create a new leaderboard identity'
+        using errcode = 'insufficient_privilege';
+    end if;
+
     -- Claiming a NEW identity is the step an attacker repeats to escape a
     -- per-player limit, so it is rate limited by IP specifically here — on the
     -- claim path only. Returning players never reach this branch, so a shared

@@ -192,3 +192,59 @@ test('a failed erasure says so and keeps the local identity intact', async ({ pa
 // owner_secret on load, so a loaded profile always carries an identity. The guard
 // stays as defence for a profile that failed to load, but asserting on it would
 // mean asserting on a state the game cannot actually be in.
+
+// ── Attestation (Cloudflare Turnstile) ────────────────────────────────────────
+// These run on a build with no VITE_TURNSTILE_SITE_KEY, which is the shipping
+// default. The property under test is that the feature is genuinely dormant —
+// not merely unused, but making no third-party request and changing no
+// behaviour. The enforced path is verified server-side by
+// supabase/verify_hardening.sql, since it needs a Cloudflare round trip.
+
+test('with no site key, attestation loads nothing from Cloudflare', async ({ page }) => {
+  const thirdParty: string[] = [];
+  page.on('request', (r) => {
+    const host = new URL(r.url()).host;
+    if (host && !host.startsWith('localhost') && !host.startsWith('127.')) thirdParty.push(r.url());
+  });
+
+  await seed(page);
+  await page.goto('/');
+  await expect(page.locator('#start-btn')).toBeVisible({ timeout: 20000 });
+  await page.waitForTimeout(1500);
+
+  // The whole privacy claim rests on this: an unconfigured build phones nobody.
+  expect(thirdParty.filter((u) => u.includes('cloudflare') || u.includes('turnstile'))).toEqual([]);
+  expect(thirdParty).toEqual([]);
+});
+
+test('erasure clears the local attestation flag', async ({ page }) => {
+  // The regenerated identity is unclaimed server-side. Leaving `attested` true
+  // would make the next submission skip the challenge and then fail the claim,
+  // silently, on a build with attestation enforced.
+  await seed(page);
+  await page.goto('/');
+  await expect(page.locator('#start-btn')).toBeVisible({ timeout: 20000 });
+
+  await page.evaluate(() => {
+    const raw = localStorage.getItem('sig_profile_v1');
+    const p = JSON.parse(raw!) as Record<string, unknown>;
+    p['attested'] = true;
+    localStorage.setItem('sig_profile_v1', JSON.stringify(p));
+  });
+
+  await page.locator('#forge-btn').click();
+  await page.locator('#settings-tab-data').click();
+  const btn = page.locator('#delete-data-btn');
+  await btn.click();
+  await btn.click();
+  await expect(page.locator('#delete-data-status')).not.toHaveText('', { timeout: 15000 });
+
+  // With no backend configured the erasure fails, so the identity — and the flag
+  // with it — must be left exactly as they were, not half-reset.
+  const after = await page.evaluate(() => {
+    const raw = localStorage.getItem('sig_profile_v1');
+    return JSON.parse(raw!) as { attested?: boolean; player_id?: string };
+  });
+  expect(after.player_id).toBe('00000000-0000-0000-0000-000000000001');
+  expect(after.attested).toBe(true);
+});

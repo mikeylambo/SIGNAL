@@ -88,6 +88,13 @@ export interface SavedProfile {
   activeMaterial: string;
   /** One-time premium unlock. Cosmetics and record-keeping only — see entitlements.ts. */
   premium: boolean;
+  /**
+   * Whether this device has passed a Turnstile challenge and holds an attested
+   * leaderboard identity. A local fast path only — the server is the authority,
+   * so editing this by hand costs you a redundant challenge rather than granting
+   * a bypass. See attestation.ts.
+   */
+  attested: boolean;
 }
 
 export interface ForgeSelection {

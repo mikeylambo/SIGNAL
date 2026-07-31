@@ -1,7 +1,7 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 16;
+const SCHEMA_VERSION = 17;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -58,6 +58,7 @@ const SaveSystem = (() => {
       unlockedMaterials: [],
       activeMaterial: 'standard',
       premium: false,
+      attested: false,
     };
   }
 
@@ -202,6 +203,14 @@ const SaveSystem = (() => {
       raw.activeMaterial = 'standard';
       raw.premium = false;
       raw.schemaVersion = 16;
+    }
+    if (raw.schemaVersion < 17) {
+      // v16 → v17: Turnstile attestation. Existing players are deliberately
+      // marked attested — they already hold a claimed identity server-side, so
+      // they would never reach the claim path anyway, and challenging them would
+      // be friction with nothing behind it.
+      raw.attested = true;
+      raw.schemaVersion = 17;
     }
     return raw;
   }

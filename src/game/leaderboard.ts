@@ -1,5 +1,6 @@
 import { getClient } from '../lib/supabase';
 import { profile, saveProfile } from '../save';
+import { ensureAttested } from '../attestation';
 import type { LeaderboardRow } from '../types';
 
 // ── Board key helpers ──────────────────────────────────────────────────────────
@@ -105,6 +106,19 @@ export async function submitScore(
       throw new Error('display_name contains disallowed content');
     }
 
+    // Attestation gates *creating* an identity, so it only ever runs once per
+    // device and only on builds where Turnstile is configured. A returning
+    // player already has a server-side row and never sees a challenge.
+    //
+    // Deliberately not fatal: a blocked domain, an ad blocker or a refused
+    // challenge costs this one leaderboard entry, never the run. Returning false
+    // here is the same outcome as any other leaderboard failure — no new-best
+    // banner, game untouched.
+    if (!(await ensureAttested())) {
+      console.warn('[leaderboard] attestation unavailable — skipping submission');
+      return false;
+    }
+
     const { data, error } = await supabase.rpc('submit_score', {
       p_board_key:     boardKey,
       p_player_id:     player_id,
@@ -197,6 +211,11 @@ export async function deletePlayerData(): Promise<number> {
   profile.player_id    = crypto.randomUUID();
   profile.owner_secret = crypto.randomUUID();
   profile.display_name = '';
+  // The regenerated identity is unclaimed server-side, so the local "already
+  // attested" fast path no longer describes it. Leaving this true would make the
+  // next submission skip the challenge and then fail the claim, silently, with
+  // attestation enforced.
+  profile.attested     = false;
   saveProfile();
 
   return typeof data === 'number' ? data : 0;
