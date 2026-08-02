@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 
 /**
  * Fails a production build that would ship with no leaderboard code at all.
@@ -22,10 +22,16 @@ function requireBackendEnv(): Plugin {
     name: 'signal-require-backend-env',
     apply: 'build',
     config(_config, { mode }) {
-      // Read from process.env: loadEnv-populated import.meta.env isn't available
-      // here, and Vercel/CI supply these as real environment variables anyway.
-      const url = process.env['VITE_SUPABASE_URL'];
-      const key = process.env['VITE_SUPABASE_ANON_KEY'];
+      // loadEnv, NOT process.env. Vite inlines values from .env files, but it
+      // does not copy them into process.env — so a process.env-only check failed
+      // the build for anyone following the documented setup (`cp .env.example
+      // .env`, fill it in), even though that build would have worked perfectly.
+      // A guard that blocks the primary workflow gets deleted, not obeyed.
+      // The '' prefix loads every key, and loadEnv folds in real environment
+      // variables too, so CI and Vercel (which supply them that way) still work.
+      const env = loadEnv(mode, process.cwd(), '');
+      const url = env['VITE_SUPABASE_URL'] || process.env['VITE_SUPABASE_URL'];
+      const key = env['VITE_SUPABASE_ANON_KEY'] || process.env['VITE_SUPABASE_ANON_KEY'];
       if (url && key) return;
       if (process.env['SIGNAL_ALLOW_NO_BACKEND'] === '1') {
         console.warn(

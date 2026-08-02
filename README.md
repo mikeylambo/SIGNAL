@@ -128,6 +128,13 @@ resulting deployment can never do leaderboards, whatever you configure at runtim
 A Vite plugin (`vite.config.ts`) turns that silent trap into a failed build. To build
 without a backend on purpose, set `SIGNAL_ALLOW_NO_BACKEND=1`.
 
+The guard reads the variables through Vite's own `loadEnv`, so a `.env` file works exactly
+as the Quick start describes — it does **not** require them to be exported into the shell.
+That distinction matters: Vite inlines values from `.env` but never copies them into
+`process.env`, so an earlier `process.env`-only check failed the build for anyone following
+the documented setup, on a build that would have worked perfectly. A guard that blocks the
+normal workflow gets deleted rather than obeyed.
+
 ## Deploying
 
 Vercel picks up `vercel.json` as-is: build command, output directory, cache headers, and
