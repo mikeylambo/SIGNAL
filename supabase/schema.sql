@@ -200,16 +200,16 @@ create or replace function max_plausible_score(p_level int)
 returns bigint
 language sql
 immutable
+set search_path = public
 as $$
   select (400::bigint * greatest(coalesce(p_level, 1), 1)
                       * (greatest(coalesce(p_level, 1), 1) + 30));
 $$;
 
--- These are called from inside SECURITY DEFINER functions, never by the client,
--- so anon deliberately gets no execute grant. max_plausible_score is granted
--- because it is useful to a moderator reading the queue, and leaks nothing.
-grant execute on function max_plausible_score to anon;
-grant execute on function max_plausible_score to authenticated;
+-- Grants for every function in this file are set in the "Least privilege" block
+-- at the END of the file, not here. `create or replace function` resets a
+-- function's grants, so anything granted or revoked before the last definition
+-- of that function is silently discarded.
 
 /**
  * Drops spent rate-limit rows. The table is keyed per identity and per IP, so
@@ -304,10 +304,7 @@ $$;
 -- alone leaves the function callable by anon anyway, and the whole attestation
 -- gate is one direct RPC call away from being skipped. Caught by
 -- verify_hardening.sql's has_function_privilege check, not by reading the code.
-revoke execute on function claim_identity_attested from public;
-revoke execute on function claim_identity_attested from anon;
-revoke execute on function claim_identity_attested from authenticated;
-grant  execute on function claim_identity_attested to service_role;
+-- Grants are applied in the "Least privilege" block at the end of this file.
 
 create or replace function verify_or_claim_owner(
   p_player_id     uuid,
@@ -840,3 +837,71 @@ create or replace view suspicious_scores as
   where s.level_reached is not null
     and s.score::numeric / nullif(max_plausible_score(s.level_reached), 0) > 0.35
   order by (s.score::numeric / nullif(max_plausible_score(s.level_reached), 0)) desc;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Least privilege
+-- ═══════════════════════════════════════════════════════════════════════════
+-- This block is load-bearing, and it must stay at the END of the file so it runs
+-- after every function above has been (re)created — `create or replace function`
+-- resets a function's grants, so revoking earlier would be silently undone.
+--
+-- The trap: **Postgres grants EXECUTE on every new function to PUBLIC**, and
+-- anon inherits PUBLIC. So a SECURITY DEFINER helper is callable by anyone with
+-- the anon key unless PUBLIC is explicitly revoked — writing `grant execute … to
+-- anon` for the two or three functions meant to be public does nothing to
+-- restrict the rest. Found by Supabase's database linter against the live
+-- project, after the same bug had already been caught once by a test on
+-- claim_identity_attested; that fix addressed one instance, not the class.
+--
+-- What was actually reachable by anon before this:
+--   * purge_rate_limits()  — one call wipes EVERY rate-limit bucket, which
+--     defeats the whole rate-limiting layer.
+--   * bump_rate_limit(k,n,i) — inflate an arbitrary bucket, so a targeted caller
+--     could fill another player's submit window and lock them out. A denial of
+--     service built out of the anti-abuse machinery itself.
+--   * verify_or_claim_owner() — claim identities directly, skipping submit_score
+--     and its validation entirely.
+--
+-- Everything is revoked from PUBLIC first, then the small set that the client
+-- genuinely calls is granted back. That ordering is the point: default-deny.
+revoke execute on function
+    bump_rate_limit(text, int, interval),
+    client_ip(),
+    purge_rate_limits(),
+    purge_banned_player_scores(),
+    verify_or_claim_owner(uuid, uuid),
+    claim_identity_attested(uuid, uuid),
+    attestation_required(),
+    fold_leet(text, text),
+    normalize_display_name(text, text),
+    tokenize_display_name(text, text),
+    is_name_blocked(text),
+    max_plausible_score(int),
+    submit_score(text, uuid, uuid, text, int, int, text, text),
+    update_display_name(uuid, uuid, text),
+    delete_player_data(uuid, uuid),
+    report_player(uuid, uuid, uuid)
+  from public, anon, authenticated;
+
+-- The only four the game calls directly. Each is SECURITY DEFINER and does its
+-- own validation, ownership check and rate limiting; the helpers they call
+-- internally run as the definer, so revoking those from anon costs nothing.
+grant execute on function submit_score(text, uuid, uuid, text, int, int, text, text) to anon, authenticated;
+grant execute on function update_display_name(uuid, uuid, text)                      to anon, authenticated;
+grant execute on function delete_player_data(uuid, uuid)                             to anon, authenticated;
+grant execute on function report_player(uuid, uuid, uuid)                            to anon, authenticated;
+
+-- The Edge Function's claim path stays service-role only.
+grant execute on function claim_identity_attested(uuid, uuid) to service_role;
+
+-- ── Views run as the caller, not as their owner ──────────────────────────────
+-- Without security_invoker a view executes with its creator's rights, which
+-- BYPASSES row-level security on the tables underneath. moderation_queue reads
+-- player_reports — a table anon deliberately cannot read — so as a definer view
+-- it was a hole straight through that RLS. suspicious_scores additionally
+-- publishes a "how close to the rejection threshold am I" number, which is a
+-- calibration aid for exactly the person it exists to catch.
+alter view moderation_queue   set (security_invoker = true);
+alter view suspicious_scores  set (security_invoker = true);
+
+revoke all on moderation_queue, suspicious_scores from public, anon, authenticated;

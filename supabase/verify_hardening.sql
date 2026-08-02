@@ -245,12 +245,47 @@ begin
   end if;
   raise notice 'PASS an attested claim admits a new player and is recorded as attested';
 
-  -- anon must not be able to call the claim function directly, or the gate is
-  -- one RPC away from being skipped entirely.
+  -- ── Least privilege ───────────────────────────────────────────────────────
+  -- Postgres grants EXECUTE on every new function to PUBLIC, and anon inherits
+  -- PUBLIC — so a SECURITY DEFINER helper is reachable with the public anon key
+  -- unless PUBLIC is explicitly revoked. Two of these were genuinely exploitable
+  -- on the live project before the fix: purge_rate_limits() wiped every bucket
+  -- in one call, and bump_rate_limit() let a caller inflate someone else's
+  -- window and lock them out. Asserted per-function so a new helper added
+  -- without a revoke fails here rather than in production.
   if has_function_privilege('anon', 'claim_identity_attested(uuid,uuid)', 'execute') then
-    raise exception 'FAIL: anon can execute claim_identity_attested — the gate is bypassable';
+    raise exception 'FAIL: anon can execute claim_identity_attested — the attestation gate is bypassable';
   end if;
-  raise notice 'PASS anon cannot execute claim_identity_attested';
+  if has_function_privilege('anon', 'purge_rate_limits()', 'execute') then
+    raise exception 'FAIL: anon can execute purge_rate_limits — one call wipes every rate limit';
+  end if;
+  if has_function_privilege('anon', 'bump_rate_limit(text,int,interval)', 'execute') then
+    raise exception 'FAIL: anon can execute bump_rate_limit — a targeted caller can lock out another player';
+  end if;
+  if has_function_privilege('anon', 'verify_or_claim_owner(uuid,uuid)', 'execute') then
+    raise exception 'FAIL: anon can execute verify_or_claim_owner — identities can be claimed outside submit_score';
+  end if;
+  raise notice 'PASS internal SECURITY DEFINER helpers are not executable by anon';
+
+  -- The four the client genuinely calls must stay callable, or the game breaks.
+  if not has_function_privilege('anon', 'submit_score(text,uuid,uuid,text,int,int,text,text)', 'execute')
+     or not has_function_privilege('anon', 'update_display_name(uuid,uuid,text)', 'execute')
+     or not has_function_privilege('anon', 'delete_player_data(uuid,uuid)', 'execute')
+     or not has_function_privilege('anon', 'report_player(uuid,uuid,uuid)', 'execute') then
+    raise exception 'FAIL: a public RPC lost its anon grant — the game cannot reach the leaderboard';
+  end if;
+  raise notice 'PASS the four public RPCs remain callable by anon';
+
+  -- Views must run as the caller. As definer views they bypass RLS on the tables
+  -- underneath — moderation_queue reads player_reports, which anon cannot read.
+  if not exists (
+    select 1 from pg_class c
+    where c.relname in ('moderation_queue','suspicious_scores')
+      and c.reloptions::text like '%security_invoker=true%'
+  ) then
+    raise exception 'FAIL: moderation views are not security_invoker — they bypass RLS';
+  end if;
+  raise notice 'PASS moderation views run as the caller, not as their owner';
 
   -- Restore the default so re-running the file is deterministic.
   update app_settings set value = 'false' where key = 'require_attestation';
