@@ -255,14 +255,18 @@ test('the results screen actions stay reachable at this viewport', async ({ page
   // page — a document that scrolls would drag the WebGL canvas with it.
   const size = page.viewportSize()!;
 
+  // The actions are sticky-positioned, so they must be on screen the moment the
+  // results appear — WITHOUT any scrolling. That is the whole point: a player
+  // has no reason to suspect content below the leaderboard panel, and reported
+  // the Menu button as missing when it merely sat below the fold.
   for (const id of ['#restart-btn', '#menu-btn']) {
     const btn = page.locator(id);
     await expect(btn).toBeVisible();
-    await btn.scrollIntoViewIfNeeded();
 
     const box = (await btn.boundingBox())!;
-    expect(box.y).toBeGreaterThanOrEqual(-1);
-    expect(box.y + box.height).toBeLessThanOrEqual(size.height + 1);
+    expect(box.y, `${id} must not sit above the viewport`).toBeGreaterThanOrEqual(-1);
+    expect(box.y + box.height, `${id} must be on screen without scrolling`)
+      .toBeLessThanOrEqual(size.height + 1);
     // Reachable means actually hittable, not merely painted somewhere.
     await expect(btn).toBeEnabled();
   }

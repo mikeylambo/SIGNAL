@@ -7,6 +7,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed — the results screen's actions could not be found
+- Reported from a real device as "no menu button after a run". They were there, just
+  below the fold: the results screen is the tallest surface in the game, and on any short
+  viewport (a 1280×720 desktop, or a phone once the browser chrome shows) *Run Again* and
+  *Menu* sat past the bottom edge.
+- I had already measured this while writing the cross-browser tests — ~13px below the fold
+  at 720px — and judged it acceptable because `.modal-screen` scrolls. That judgement was
+  wrong. A player has no reason to suspect content below the leaderboard panel, so the
+  buttons may as well not exist. **Reachable after a scroll you don't know about is not
+  reachable.**
+- The action row is now `position: sticky` at the bottom of the modal, with a gradient
+  backdrop so content scrolling underneath stays legible, and `--sab` padding so it clears
+  the iOS home indicator.
+- The test was tightened to match: it no longer calls `scrollIntoViewIfNeeded()` before
+  measuring, so it asserts the buttons are on screen *without* scrolling. Confirmed it
+  fails without the fix.
+
 ### Added — Turnstile attestation on identity creation
 - The rate limits shipped earlier were only as strong as the cost of a new identity, and a
   `crypto.randomUUID()` costs nothing — so a per-player limit was decorative: mint a new
