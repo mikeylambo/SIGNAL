@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- viewport-fit=cover is set HERE, statically, not injected by JS. Adding it at
+         runtime and reading env(safe-area-inset-*) in the same synchronous task
+         returns 0 — the browser has not re-evaluated the viewport yet — so the
+         insets silently never applied while cover mode WAS active. That is how
+         the header ended up drawn over the iOS status bar. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>SIGNAL — Cognitive Calibration Engine</title>
     <!-- Descriptions state what the game IS, never what it does to the player.
          "Sharpen your working memory" and "master working memory" are outcome
@@ -63,6 +68,16 @@
         }
 
         :root {
+            /* Safe-area insets, straight from the browser. Previously measured
+               once in JS at load and written here — which broke twice over: the
+               measurement ran before the viewport had been re-evaluated (so it
+               read 0), and even when correct it was a snapshot that never
+               updated on rotation. env() is live, needs no JS, and falls back to
+               0px anywhere without insets. */
+            --sat: env(safe-area-inset-top, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+            --sal: env(safe-area-inset-left, 0px);
+            --sar: env(safe-area-inset-right, 0px);
             --primary: #00E5FF;
             --bg: #05080D;
             --bg-modal: rgba(5, 8, 13, 0.96);

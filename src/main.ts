@@ -40,31 +40,14 @@ document.addEventListener('touchmove', (e: TouchEvent) => {
 }
 
 window.addEventListener('load', () => {
-  // On iOS, enable viewport-fit=cover so env(safe-area-inset-*) returns real values,
-  // then read those values once and store as static CSS vars (--sat / --sab).
-  // Skipped entirely on non-iOS / headless to avoid layout overhead.
-  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-    const vp = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
-    if (vp && !vp.content.includes('viewport-fit')) {
-      vp.content += ', viewport-fit=cover';
-    }
-    const _saDiv = document.createElement('div');
-    _saDiv.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px);left:env(safe-area-inset-left,0px);right:env(safe-area-inset-right,0px);height:0;visibility:hidden;pointer-events:none;';
-    document.body.appendChild(_saDiv);
-    const _saStyle = getComputedStyle(_saDiv);
-    const _sat = parseFloat(_saStyle.top) || 0;
-    const _sab = parseFloat(_saStyle.bottom) || 0;
-    // Left/right insets matter in landscape, where the notch/Dynamic Island sits
-    // on one side of the screen instead of the top — without these, text pinned
-    // to the screen edge (like the controls hint) can render partly under it.
-    const _sal = parseFloat(_saStyle.left) || 0;
-    const _sar = parseFloat(_saStyle.right) || 0;
-    _saDiv.remove();
-    if (_sat > 0) document.documentElement.style.setProperty('--sat', `${_sat}px`);
-    if (_sab > 0) document.documentElement.style.setProperty('--sab', `${_sab}px`);
-    if (_sal > 0) document.documentElement.style.setProperty('--sal', `${_sal}px`);
-    if (_sar > 0) document.documentElement.style.setProperty('--sar', `${_sar}px`);
-  }
+  // Safe-area insets are handled entirely in CSS now — index.html sets
+  // viewport-fit=cover statically and derives --sat/--sab/--sal/--sar from
+  // env(). The JS that used to live here injected viewport-fit at runtime and
+  // then measured env() in the SAME synchronous task, which returns 0 because
+  // the browser has not re-evaluated the viewport yet. The `if (x > 0)` guards
+  // then skipped writing the variables, so cover mode was on with no insets
+  // applied and the header rendered over the iOS status bar. It was also a
+  // one-shot read, so the values went stale on rotation.
 
   const container = document.getElementById('canvas-container')!;
 

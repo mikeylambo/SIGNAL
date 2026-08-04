@@ -82,6 +82,21 @@ export function onTouchMove(e: TouchEvent): void {
   }
 }
 
+/**
+ * Rebuilding the board is the expensive half of a resize: createBoard() disposes
+ * every cube material and makes new ones, and each new material is a fresh
+ * shader program because of the fresnel rim injected via onBeforeCompile. On
+ * mobile that is tens of shader compiles.
+ *
+ * That is fine once. It is not fine at the rate mobile browsers actually emit
+ * `resize` — iOS fires it repeatedly as the address bar collapses and expands,
+ * and again on every rotation step. So the cheap work (camera, renderer and
+ * bloom sizing) stays synchronous and per-event, and only the board rebuild is
+ * debounced to the end of the burst.
+ */
+let boardRebuildTimer: ReturnType<typeof setTimeout> | null = null;
+const BOARD_REBUILD_DEBOUNCE_MS = 150;
+
 export function onWindowResize(): void {
   camera.aspect = window.innerWidth / window.innerHeight;
   // Reset zoom on orientation change so a pinch-zoom from portrait doesn't
@@ -94,7 +109,13 @@ export function onWindowResize(): void {
     const scale = bloomResScale();
     bloomPass.setSize(window.innerWidth * scale, window.innerHeight * scale);
   }
-  if (state.pattern.length === 0) {
-    createBoard();
-  }
+
+  if (boardRebuildTimer) clearTimeout(boardRebuildTimer);
+  boardRebuildTimer = setTimeout(() => {
+    boardRebuildTimer = null;
+    // Re-checked inside the timer, not captured outside it: a run can start
+    // during the debounce window, and rebuilding the board mid-run would
+    // discard the pattern the player is currently being shown.
+    if (state.pattern.length === 0) createBoard();
+  }, BOARD_REBUILD_DEBOUNCE_MS);
 }

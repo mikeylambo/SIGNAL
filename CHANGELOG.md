@@ -7,6 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed — the header rendered over the iOS status bar
+- Reported from a real iPhone, with screenshots: the SIGNAL wordmark drawn on top of the
+  clock and wifi icons, and the bottom nav row clipped off the bottom edge. The *older*
+  build looked correct, which is the clue — without `viewport-fit=cover`, iOS keeps content
+  inside the safe area by itself.
+- The cause: `main.ts` injected `viewport-fit=cover` into the viewport meta at runtime and
+  then read `env(safe-area-inset-*)` **in the same synchronous task**. The browser has not
+  re-evaluated the viewport at that point, so every inset measured `0`. The
+  `if (inset > 0)` guards then skipped writing `--sat`/`--sab`, leaving cover mode active
+  with no compensating padding — content extended under the status bar and home indicator
+  with nothing to push it back.
+- A second bug in the same code: it measured once at load, so the values went stale on
+  rotation even when they were right.
+- Fixed declaratively. `viewport-fit=cover` is now in the static meta tag, and
+  `--sat`/`--sab`/`--sal`/`--sar` come straight from `env()` in `:root`. No JS, no ordering
+  hazard, live on rotation, and it falls back to `0px` everywhere without insets. The ~25
+  lines of measurement code are gone.
+
+### Performance — resize no longer rebuilds the board on every event
+- `onWindowResize()` called `createBoard()` whenever the menu was showing. That disposes
+  every cube material and creates new ones, and each new material is a fresh shader program
+  because of the fresnel rim injected via `onBeforeCompile` — tens of shader compiles.
+- Fine once; not fine at the rate mobile browsers actually emit `resize`. iOS fires it
+  repeatedly as the address bar collapses and expands, and the broken `viewport-fit` state
+  above made that churn worse. Likely a contributor to the lag reported alongside the
+  overlap, though that is a hypothesis rather than a profiled result — the sandbox has no
+  iOS device to measure on.
+- The cheap work (camera, renderer and bloom sizing) stays synchronous per event; only the
+  board rebuild is debounced to the end of the burst. The `state.pattern.length === 0` check
+  moved *inside* the timer, so a run starting during the debounce window can't have its
+  board rebuilt out from under it.
+
 ### Fixed — the results screen's actions could not be found
 - Reported from a real device as "no menu button after a run". They were there, just
   below the fold: the results screen is the tallest surface in the game, and on any short
