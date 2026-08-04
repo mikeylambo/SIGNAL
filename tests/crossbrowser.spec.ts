@@ -247,18 +247,14 @@ test('the results screen actions stay reachable at this viewport', async ({ page
 
   await expect(page.locator('#results-screen')).toBeVisible({ timeout: 20000 });
 
-  // The contract is NOT "everything fits without scrolling" — the results screen
-  // is the tallest surface in the game and `.modal-screen` is deliberately
-  // `overflow-y: auto`, so on a short viewport (a 1280×720 desktop, or a laptop
-  // with browser chrome) the actions legitimately sit below the fold. What must
-  // hold is that they are reachable, and that the MODAL scrolls rather than the
-  // page — a document that scrolls would drag the WebGL canvas with it.
+  // Two things must hold together, and fixing either one alone broke the other
+  // in turn: the actions must be on screen the moment the results appear (they
+  // used to sit below a fold nobody knew about), AND they must not cover the
+  // content above them (the sticky bar that fixed the first bug covered 40px of
+  // the leaderboard panel's 66px on a 390×844 phone). The scrolling must also
+  // stay inside the modal — a scrolling document would drag the WebGL canvas.
   const size = page.viewportSize()!;
 
-  // The actions are sticky-positioned, so they must be on screen the moment the
-  // results appear — WITHOUT any scrolling. That is the whole point: a player
-  // has no reason to suspect content below the leaderboard panel, and reported
-  // the Menu button as missing when it merely sat below the fold.
   for (const id of ['#restart-btn', '#menu-btn']) {
     const btn = page.locator(id);
     await expect(btn).toBeVisible();
@@ -270,6 +266,41 @@ test('the results screen actions stay reachable at this viewport', async ({ page
     // Reachable means actually hittable, not merely painted somewhere.
     await expect(btn).toBeEnabled();
   }
+
+  // The structural invariant that makes overlap impossible: the actions are a
+  // sibling footer below the scrollable body, not a layer on top of it.
+  const bodyBox = (await page.locator('#results-screen .results-body').boundingBox())!;
+  const actionsBox = (await page.locator('#results-screen .results-actions').boundingBox())!;
+  expect(actionsBox.y, 'the actions must sit below the scrollable body, not over it')
+    .toBeGreaterThanOrEqual(bodyBox.y + bodyBox.height - 1);
+
+  // And the concrete case that was reported: the leaderboard panel is the last
+  // thing in the body, so it is what an overlaying footer eats first. Hit-test
+  // rather than compare rectangles — a rectangle comparison can't tell a footer
+  // painted OVER the panel from one merely laid out past a clipped edge, and
+  // the panel is legitimately clipped by the body's own scroll on short
+  // viewports.
+  //
+  // Sample the panel's whole visible height, not just its centre: the sticky bar
+  // covered the bottom 40px of 66px, so a centre-point probe still landed on the
+  // panel and passed a build that was visibly broken.
+  const hits = await page.evaluate(() => {
+    const panel = document.getElementById('leaderboard-panel');
+    const body = document.querySelector('#results-screen .results-body');
+    if (!panel || !body) return ['missing'];
+    const p = panel.getBoundingClientRect();
+    const b = body.getBoundingClientRect();
+    const top = Math.max(p.top, b.top) + 2;
+    const bottom = Math.min(p.bottom, b.bottom) - 2;
+    if (bottom - top < 4) return ['clipped'];  // not on screen at all; nothing to cover
+    const x = p.left + p.width / 2;
+    return [0, 0.25, 0.5, 0.75, 1].map((f) => {
+      const el = document.elementFromPoint(x, top + (bottom - top) * f);
+      return el && panel.contains(el) ? 'panel' : `covered by .${el?.className || el?.tagName || 'nothing'}`;
+    });
+  });
+  expect(hits.filter((h) => !/^(panel|clipped)$/.test(h)),
+    'the leaderboard panel must not be painted over').toEqual([]);
 
   // The page itself must not have become scrollable.
   const docOverflow = await page.evaluate(() => ({

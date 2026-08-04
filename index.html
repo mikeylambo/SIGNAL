@@ -272,26 +272,35 @@
         }
         .modal-container h2 { font-family: var(--font-display); color: var(--active); margin-top: 0; font-size: 1.3rem; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 1.5rem;}
 
-        /* Results actions pin to the bottom of the scroll container, so Run
-           Again and Menu are on screen from the moment the results appear —
-           however tall the content above them grows. The negative margins and
-           padding let the backdrop bleed to the container's edges, so content
-           scrolling underneath is covered rather than peeking out beside them. */
-        .results-actions {
-            position: sticky;
-            bottom: 0;
-            display: flex; flex-direction: column; gap: 15px;
-            margin: 1.5rem -2rem -2rem;
-            padding: 1rem 2rem calc(1rem + var(--sab, 0px));
-            background: linear-gradient(to bottom, rgba(10,15,22,0) 0%, rgba(10,15,22,0.92) 22%, rgba(10,15,22,0.98) 100%);
-            border-bottom-left-radius: 6px; border-bottom-right-radius: 6px;
+        /* Results: the actions are a real footer, not an overlay.
+
+           They must be on screen the moment the results appear — a player has
+           no reason to suspect there is anything below the leaderboard panel,
+           and reported the Menu button as simply missing when it sat below the
+           fold. `position: sticky` achieved that but bought a worse bug: a
+           sticky box floats OVER the content behind it, so on a 390×844 phone
+           the bar covered 40px of the leaderboard panel's 66px. The panel was
+           only readable by scrolling — the exact failure being fixed, moved.
+
+           So the scroll boundary moves inward instead: this one modal screen
+           stops scrolling, the container becomes a bounded flex column, and
+           only `.results-body` scrolls. The footer is a sibling that reserves
+           its own space, so it cannot overlap anything by construction. */
+        #results-screen { overflow: hidden; }
+        #results-screen .modal-container {
+            display: flex; flex-direction: column;
+            max-height: 100%; min-height: 0;
+            flex-shrink: 1;
+            overflow: hidden;
         }
-        @media (max-width: 480px) {
-            /* Matches .modal-container's tighter padding at this breakpoint. */
-            .results-actions {
-                margin: 1.5rem -1.5rem -1.5rem;
-                padding: 1rem 1.5rem calc(1rem + var(--sab, 0px));
-            }
+        .results-body {
+            flex: 0 1 auto; min-height: 0;
+            overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+        }
+        .results-actions {
+            flex: 0 0 auto;
+            display: flex; flex-direction: column; gap: 15px;
+            margin-top: 1.5rem;
         }
 
         .final-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; background: rgba(0,0,0,0.4); padding: 1.2rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); }
@@ -766,6 +775,7 @@
     <!-- Results Modal -->
     <div id="results-screen" class="modal-screen" role="dialog" aria-modal="true" aria-labelledby="end-title">
         <div class="modal-container">
+          <div class="results-body">
             <h2 id="end-title">Run Ended</h2>
             <div class="final-stats" id="final-stats-grid"></div>
             <div style="color: var(--currency); font-weight: bold; margin-bottom: 1.5rem; font-family: var(--font-mono); font-size: 1.2rem;" id="frag-payout-box">
@@ -811,15 +821,11 @@
                 font-family:var(--font-mono); font-size:0.72rem;
                 color:var(--text-muted); margin-top:1rem; margin-bottom:0.25rem;
                 letter-spacing:0.5px; line-height:1.6; text-align:center;"></div>
+          </div>
 
-            <!-- Sticky, not just last-in-the-flow. The results screen is the
-                 tallest surface in the game, and on a short viewport (a 1280×720
-                 desktop, or any phone once the browser chrome is showing) these
-                 actions sat below the fold. The modal scrolls, so they were
-                 reachable — but a player has no reason to suspect there is
-                 anything below the leaderboard panel, and reported the Menu
-                 button as simply missing. Reachable-after-a-scroll-you-don't-
-                 know-about is not reachable. -->
+            <!-- Outside .results-body on purpose: this is the non-scrolling
+                 footer of the flex column, so it is always on screen and never
+                 covers the panel above it. See the .results-actions CSS. -->
             <div class="results-actions">
                 <button id="enter-signal-btn" style="display:none;">Enter SIGNAL →</button>
                 <button id="restart-btn">Run Again</button>

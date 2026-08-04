@@ -39,7 +39,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   moved *inside* the timer, so a run starting during the debounce window can't have its
   board rebuilt out from under it.
 
-### Fixed — the results screen's actions could not be found
+### Fixed — the results screen hid its actions, then hid the leaderboard
 - Reported from a real device as "no menu button after a run". They were there, just
   below the fold: the results screen is the tallest surface in the game, and on any short
   viewport (a 1280×720 desktop, or a phone once the browser chrome shows) *Run Again* and
@@ -49,12 +49,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   wrong. A player has no reason to suspect content below the leaderboard panel, so the
   buttons may as well not exist. **Reachable after a scroll you don't know about is not
   reachable.**
-- The action row is now `position: sticky` at the bottom of the modal, with a gradient
-  backdrop so content scrolling underneath stays legible, and `--sab` padding so it clears
-  the iOS home indicator.
-- The test was tightened to match: it no longer calls `scrollIntoViewIfNeeded()` before
-  measuring, so it asserts the buttons are on screen *without* scrolling. Confirmed it
-  fails without the fix.
+- The first fix made the action row `position: sticky`. It put the buttons on screen, and
+  **traded one hidden-content bug for a worse one**: a sticky box floats *over* whatever is
+  behind it, so on a 390×844 iPhone the bar covered 40px of the leaderboard panel's 66px.
+  Reported from the device as "leaderboard is gone" — and it effectively was, since all
+  that survived was the section label. Same failure, moved down the page.
+- The real fix moves the scroll boundary inward instead of layering. `#results-screen` no
+  longer scrolls; its `.modal-container` is a bounded flex column of a new scrollable
+  `.results-body` plus a `flex-shrink: 0` `.results-actions` footer. The footer reserves
+  its own space, so it **cannot** overlap anything — it is structural, not a z-order
+  agreement. Safe-area padding stays on `.modal-screen`, where it already was.
+- The test now asserts both halves, because fixing either alone broke the other: the
+  buttons are on screen without scrolling, the actions sit below the body rather than over
+  it, and the leaderboard panel is not painted over. That last check hit-tests five points
+  down the panel's visible height rather than comparing rectangles — a rectangle comparison
+  can't distinguish "covered" from "clipped by its own scroll", and a single centre-point
+  probe *passed* the broken build, because the covered 40px were all below the centre.
+  Verified against the sticky build on two iPhone viewports before keeping it.
 
 ### Added — Turnstile attestation on identity creation
 - The rate limits shipped earlier were only as strong as the cost of a new identity, and a
