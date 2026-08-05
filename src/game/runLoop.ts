@@ -293,6 +293,14 @@ export async function startOnboardingRound(): Promise<void> {
       "font-size:0.85rem;font-weight:800;letter-spacing:2px;cursor:pointer;\">Let's go \u2192</button></div>",
     );
     card.querySelector('#ob-next-1')!.addEventListener('click', () => {
+      // Re-init inside the click, because this is the first real user gesture
+      // when the tutorial auto-starts on first launch. The initAudio() at the
+      // top of this function then runs with no gesture behind it, so the
+      // AudioContext is created `suspended` and resume() is refused — leaving
+      // the whole tutorial silent on Safari and iOS, which is exactly where a
+      // new player meets it. Calling it again here is a no-op for the context
+      // itself and succeeds at the resume.
+      initAudio();
       _stepResolve = null; removeCard(); resolve();
     });
   });

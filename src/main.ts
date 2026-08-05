@@ -19,25 +19,29 @@ document.addEventListener('touchmove', (e: TouchEvent) => {
   if (e.touches.length > 1) e.preventDefault();
 }, { passive: false });
 
-// Splash screen: skip immediately for returning users (covers Playwright tests too,
-// since they seed localStorage with hasCompletedOnboarding: true).
-// New users see a 2s show + 0.5s fade = 2.5s total before the splash is removed.
-{
+// Splash screen: removed immediately for returning users; new players get a 2s
+// show + 0.5s fade. Resolves once the splash is gone, so the first-run tutorial can wait for it
+// rather than opening underneath. The splash sits at z-index 1000 and the
+// tutorial card at 200, so starting them together would put the intro card —
+// and its "Let's go" button — behind an opaque overlay for two and a half
+// seconds.
+const splashDone: Promise<void> = (() => {
   const splashEl = document.getElementById('splash-screen');
-  if (splashEl) {
-    // Keyed on hasSeenOnboarding, not hasCompletedOnboarding: a player who
-    // skipped the tutorial has still seen the app, and shouldn't sit through
-    // the first-run splash again on every launch.
-    if (profile.hasSeenOnboarding) {
-      splashEl.remove();
-    } else {
-      setTimeout(() => {
-        splashEl.classList.add('splash-fade-out');
-        setTimeout(() => splashEl.remove(), 500);
-      }, 2000);
-    }
+  if (!splashEl) return Promise.resolve();
+  // Keyed on hasSeenOnboarding, not hasCompletedOnboarding: a player who
+  // skipped the tutorial has still seen the app, and shouldn't sit through
+  // the first-run splash again on every launch.
+  if (profile.hasSeenOnboarding) {
+    splashEl.remove();
+    return Promise.resolve();
   }
-}
+  return new Promise<void>(resolve => {
+    setTimeout(() => {
+      splashEl.classList.add('splash-fade-out');
+      setTimeout(() => { splashEl.remove(); resolve(); }, 500);
+    }, 2000);
+  });
+})();
 
 window.addEventListener('load', () => {
   // Safe-area insets are handled entirely in CSS now — index.html sets
@@ -114,6 +118,24 @@ window.addEventListener('load', () => {
     updateMenuSheetHeight();
     adjustCameraForViewport();
   });
+
+  // First launch presents the tutorial instead of waiting to be found.
+  //
+  // It used to be reachable only by tapping "How to Play" in the menu sheet, so
+  // a new player who tapped Engage — the big accented button — went straight
+  // into a real permadeath run having read one line of hint text. The tutorial
+  // was fully built and most players never saw it.
+  //
+  // Not a forced gate: "Skip tutorial" is on screen from the first frame, and
+  // taking it sets hasSeenOnboarding so this never fires again. Presented, not
+  // imposed.
+  //
+  // startOnboardingRound() returns early if hasSeenOnboarding is already true,
+  // so returning players are unaffected and this cannot double-fire against a
+  // "How to Play" tap.
+  if (!profile.hasSeenOnboarding) {
+    void splashDone.then(() => startOnboardingRound());
+  }
 
   document.getElementById('replay-intro-btn')!.addEventListener('click', () => {
     const btn = document.getElementById('replay-intro-btn') as HTMLButtonElement;

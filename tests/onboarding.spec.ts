@@ -26,15 +26,97 @@ async function waitForTutorialExecute(page: Page) {
   );
 }
 
+/**
+ * Waits for the tutorial that first launch starts on its own.
+ *
+ * This replaced `clickHowToPlay` for every test that just needs the tutorial
+ * running: on a fresh profile the menu sheet is hidden before the button can be
+ * clicked, so clicking it was no longer possible — nor the path a new player
+ * takes.
+ */
+async function awaitAutoTutorial(page: Page) {
+  await expect(page.locator('#ob-card')).toBeVisible({ timeout: SPLASH_TIMEOUT_MS });
+}
+
+/**
+ * Marks the tutorial as already seen, so it does NOT auto-start.
+ *
+ * Used only by the tests that are specifically about the "How to Play" button,
+ * which is now what a *returning* player uses to replay the tutorial — a new
+ * player is shown it without asking.
+ */
+async function seedReturningPlayer(page: Page) {
+  await page.addInitScript(() => {
+    if (localStorage.getItem('sig_profile_v1')) return;
+    localStorage.setItem('sig_profile_v1', JSON.stringify({
+      schemaVersion: 17,
+      signal: 0,
+      unlockedCalibrations: ['mono'],
+      currentCalibration: 'mono',
+      customHex: '#00E5FF',
+      hasSeenOnboarding: true,
+      hasCompletedOnboarding: true,
+      unlockedAudioFeatures: [],
+      currentStreak: 0, longestStreak: 0,
+      lastRunDate: null, lastActivityDate: null, lastDailyDate: null,
+      lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
+      settings: { haptics: true, sfx: true, volume: 0.7, telemetry: false },
+    }));
+  });
+}
+
 async function clickHowToPlay(page: Page) {
   // Splash blocks clicks for ~2s; Playwright retries until the element is actionable
   await page.click('#how-to-play-btn', { timeout: SPLASH_TIMEOUT_MS });
 }
 
-test('How to Play triggers onboarding — menu sheet is hidden, intro card appears', async ({ page }) => {
+test('first launch presents the tutorial without being asked', async ({ page }) => {
+  // The tutorial used to be reachable only by tapping "How to Play", so a new
+  // player who tapped Engage went straight into a permadeath run having read one
+  // line of hint text. Every other spec seeds hasCompletedOnboarding: true, so
+  // this path went untested while being the only one a first-time player sees.
   await page.goto('/');
 
-  // Trigger tutorial via opt-in button (waits for splash to clear)
+  // Nothing is clicked here — this is the whole assertion.
+  await expect(page.locator('#ob-card')).toBeVisible({ timeout: SPLASH_TIMEOUT_MS });
+  await expect(page.locator('#menu-sheet')).toBeHidden();
+
+  // Presented, not imposed: the way out is on screen from the first frame.
+  await expect(page.locator('#ob-skip-btn')).toBeVisible();
+});
+
+test('a returning player is never shown the tutorial again', async ({ page }) => {
+  // The other half of the contract. Auto-start keys on hasSeenOnboarding, which
+  // skipping also sets — so opting out has to be permanent, or the tutorial
+  // reappears on every launch for exactly the player who declined it.
+  await seedReturningPlayer(page);
+  await page.goto('/');
+
+  await expect(page.locator('#start-btn')).toBeVisible({ timeout: SPLASH_TIMEOUT_MS });
+  await expect(page.locator('#menu-sheet')).toBeVisible();
+  await expect(page.locator('#ob-card')).toHaveCount(0);
+});
+
+test('skipping is remembered across a reload', async ({ page }) => {
+  // Skip sets hasSeenOnboarding on a real first run; the reload proves the flag
+  // is what auto-start reads, not just what the skip handler writes.
+  await page.goto('/');
+  await awaitAutoTutorial(page);
+  await page.locator('#ob-skip-btn').click();
+  await expect(page.locator('#menu-sheet')).toBeVisible({ timeout: 3000 });
+
+  await page.reload();
+
+  await expect(page.locator('#start-btn')).toBeVisible({ timeout: SPLASH_TIMEOUT_MS });
+  await expect(page.locator('#ob-card')).toHaveCount(0);
+});
+
+test('How to Play replays the tutorial for a returning player', async ({ page }) => {
+  // Seeded as returning, so the tutorial does NOT auto-start and the button is
+  // genuinely what triggers it — which is the whole point of this test.
+  await seedReturningPlayer(page);
+  await page.goto('/');
+
   await clickHowToPlay(page);
 
   // Menu sheet must be hidden — onboarding round replaced it
@@ -49,6 +131,7 @@ test('How to Play triggers onboarding — menu sheet is hidden, intro card appea
 });
 
 test('double-tapping How to Play does not start two concurrent onboarding runs', async ({ page }) => {
+  await seedReturningPlayer(page);
   await page.goto('/');
   await page.waitForSelector('#how-to-play-btn', { state: 'visible', timeout: SPLASH_TIMEOUT_MS });
 
@@ -65,8 +148,7 @@ test('double-tapping How to Play does not start two concurrent onboarding runs',
 test('skip button on onboarding lands on main menu and persists the flag', async ({ page }) => {
   await page.goto('/');
 
-  // Trigger onboarding via How to Play
-  await clickHowToPlay(page);
+  await awaitAutoTutorial(page);
 
   // Wait for the skip button to render
   await expect(page.locator('#ob-skip-btn')).toBeVisible({ timeout: 3000 });
@@ -98,7 +180,7 @@ test('tutorial pattern only ever references real board tiles', async ({ page }) 
   // flashed during Observe and could never be tapped during Execute, so the
   // round could only complete by pure luck and otherwise hung forever.
   await page.goto('/');
-  await clickHowToPlay(page);
+  await awaitAutoTutorial(page);
   await dismissIntroCard(page);
   await waitForTutorialExecute(page);
 
@@ -116,7 +198,7 @@ test('tutorial pattern only ever references real board tiles', async ({ page }) 
 
 test('tapping every pattern tile in the tutorial completes the round', async ({ page }) => {
   await page.goto('/');
-  await clickHowToPlay(page);
+  await awaitAutoTutorial(page);
   await dismissIntroCard(page);
   await waitForTutorialExecute(page);
 
@@ -157,8 +239,7 @@ test('tapping every pattern tile in the tutorial completes the round', async ({ 
 test('completing the onboarding round shows "Enter SIGNAL →" and landing on menu sets the flag', async ({ page }) => {
   await page.goto('/');
 
-  // Trigger onboarding via How to Play
-  await clickHowToPlay(page);
+  await awaitAutoTutorial(page);
 
   // Wait for the tutorial to hand control to the player
   await dismissIntroCard(page);
