@@ -104,3 +104,49 @@ test('a run still completes and reports with the leaderboard unreachable', async
 
   await expect(page.locator('#results-screen')).toBeVisible({ timeout: 15000 });
 });
+
+test('a score that never posted says so rather than showing a board without it', async ({ page }) => {
+  // The gap this closes: submitScore used to return a bare boolean, so "posted
+  // but not a personal best" and "never posted at all" rendered identically —
+  // a leaderboard the player was simply absent from. That reads as a broken
+  // leaderboard rather than as something that happened to them, and it stopped
+  // being a rare case the moment Turnstile enforcement went on: a refused
+  // challenge is routine on a locked-down network.
+  //
+  // No stubbing needed. This build has no VITE_SUPABASE_* configured, so
+  // getClient() rejects and the submission genuinely fails — the same code path
+  // a real failure takes.
+  await seed(page);
+  await page.goto('/');
+  await page.locator('#start-btn').click();
+  await page.waitForTimeout(COUNTDOWN_MS);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 20000 });
+
+  const wrongPos = await page.evaluate(() => {
+    const sig = (window as Window & {
+      __signal?: {
+        getState: () => { pattern: number[] };
+        getCubeScreenPos: (i: number) => { x: number; y: number } | null;
+      };
+    }).__signal;
+    if (!sig) return null;
+    const { pattern } = sig.getState();
+    for (let i = 0; i < 9; i++) if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
+    return null;
+  });
+  if (wrongPos) await page.mouse.click(wrongPos.x, wrongPos.y);
+
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 15000 });
+
+  const status = page.locator('#submit-status');
+  await expect(status).toBeVisible({ timeout: 15000 });
+  await expect(status).toContainText('Score not posted');
+  // Must also say the run itself was not lost, or the message trades one wrong
+  // conclusion for a worse one.
+  await expect(status).toContainText('progress is saved');
+
+  // It belongs above the board it is explaining, not below it.
+  const statusBox = (await status.boundingBox())!;
+  const panelBox  = (await page.locator('#leaderboard-panel').boundingBox())!;
+  expect(statusBox.y).toBeLessThan(panelBox.y);
+});

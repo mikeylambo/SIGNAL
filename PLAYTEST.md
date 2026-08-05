@@ -77,19 +77,29 @@ what you can query afterwards.
 - [ ] Have the rollback statement ready in a terminal, not in a browser tab you
       still have to find.
 
-## During: the one thing that can fail silently
+## During: submissions that don't land
 
 Every tester is a **new leaderboard identity**, so every one of them hits a
 Turnstile challenge on their first submission. Attestation is enforced
 (`require_attestation = true`).
 
-If a challenge fails — an ad blocker, a corporate or campus network blocking
-`challenges.cloudflare.com`, a bad moment of signal — the run plays perfectly
-and the score silently does not post. The player has no way to tell those apart
-from a broken leaderboard, and you will hear it as "it didn't save my score".
+A challenge can fail for reasons that have nothing to do with the player — an ad
+blocker, a campus or office network blocking `challenges.cloudflare.com`, a bad
+moment of signal. This used to be **silent**: the run played perfectly, the score
+never posted, and the results screen showed a leaderboard the player was simply
+missing from. Indistinguishable from a broken leaderboard.
 
-Check the edge function logs after the first two or three testers. A `403` or
-`503` there means challenges are failing, not that the game is broken:
+The results screen now says so, above the board:
+
+> Score not posted — this device couldn't be verified. Your progress is saved.
+
+So you do not have to watch for it, and a tester who sees it can tell you in
+plain words instead of reporting "it didn't save my score". **Write down every
+time it appears** — a handful across ten testers is a real signal about how much
+of your audience Turnstile is turning away.
+
+To see which half of the chain failed, check the edge function logs. A `403` or
+`503` means challenges are failing, not that the game is broken:
 
 ```sql
 -- kill switch: takes effect immediately, no deploy

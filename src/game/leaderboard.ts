@@ -86,13 +86,32 @@ async function renameEverywhere(displayName: string): Promise<void> {
  * never crash or block on a leaderboard write, so a failure just means "no
  * new-best banner this time," not an error surfaced to the player.
  */
+/**
+ * Why this is an object rather than the boolean it used to be.
+ *
+ * `false` conflated "posted, but not a personal best" with "never posted at
+ * all". The results screen then rendered identically for both, so a player whose
+ * submission was refused saw a leaderboard they were simply absent from — which
+ * reads as a broken leaderboard, not as something that happened to them. That
+ * became a live problem the moment Turnstile enforcement went on: a blocked
+ * challenge is a normal outcome on a locked-down network, and it was silent.
+ */
+export interface SubmitOutcome {
+  /** False means nothing reached the leaderboard. */
+  posted: boolean;
+  /** Only ever true when `posted` is true. */
+  isNewBest: boolean;
+  /** Why it did not post — for the player-facing message, not for logic. */
+  reason?: 'verification' | 'network';
+}
+
 export async function submitScore(
   boardKey: string,
   score: number,
   levelReached: number,
   protocol?: string,
   pacing?: string,
-): Promise<boolean> {
+): Promise<SubmitOutcome> {
   try {
     const supabase = await getClient();
     const { player_id, owner_secret, display_name } = profile;
@@ -116,7 +135,7 @@ export async function submitScore(
     // banner, game untouched.
     if (!(await ensureAttested())) {
       console.warn('[leaderboard] attestation unavailable — skipping submission');
-      return false;
+      return { posted: false, isNewBest: false, reason: 'verification' };
     }
 
     const { data, error } = await supabase.rpc('submit_score', {
@@ -131,11 +150,13 @@ export async function submitScore(
     }).abortSignal(AbortSignal.timeout(FETCH_TIMEOUT_MS));
 
     if (error) throw error;
-    return data === true;
+    return { posted: true, isNewBest: data === true };
   } catch (err) {
-    // Leaderboard failures must never surface to the player or crash the game.
+    // Still never throws and never blocks the run — but the caller now learns
+    // that nothing was posted, so it can say so instead of showing a board the
+    // player is silently missing from.
     console.warn('[leaderboard] submitScore failed:', err);
-    return false;
+    return { posted: false, isNewBest: false, reason: 'network' };
   }
 }
 

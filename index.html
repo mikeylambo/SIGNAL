@@ -811,6 +811,18 @@
                 font-family:var(--font-mono); font-size:1rem; font-weight:700;
                 color:var(--combo); margin-bottom:0.75rem; letter-spacing:1px;"></div>
 
+            <!-- Shown only when a submission did not reach the board. Sits
+                 directly above the panel because it exists to explain why the
+                 player is not on it. -->
+            <div id="submit-status" role="status" style="
+                display:none;
+                margin-top:1.25rem; padding:9px 12px;
+                border:1px solid rgba(255,180,84,0.35); border-radius:3px;
+                background:rgba(255,180,84,0.07);
+                font-family:var(--font-mono); font-size:0.7rem;
+                color:var(--combo); letter-spacing:0.3px;
+                line-height:1.6; text-align:left;"></div>
+
             <div id="leaderboard-panel" style="margin-top:1.5rem; text-align:left;">
                 <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-muted); letter-spacing:1px; margin-bottom:8px;">LEADERBOARD</div>
                 <div id="leaderboard-title" style="font-family:var(--font-display); font-size:0.78rem; color:var(--active); margin-bottom:10px; letter-spacing:1.5px; text-transform:uppercase;"></div>

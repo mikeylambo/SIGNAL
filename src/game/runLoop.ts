@@ -1263,6 +1263,13 @@ export async function showResultsScreen(): Promise<void> {
   // Show the panel as loading before the submit round-trip, not after it.
   showLeaderboardSkeleton(boardKey);
 
+  // Cleared for every results screen, not just before a submission. The submit
+  // block below is skipped entirely for an onboarding run or a player with no
+  // callsign, so hiding it only on success would leave a failure notice from an
+  // earlier run sitting above an unrelated board.
+  const submitStatusEl = document.getElementById('submit-status');
+  if (submitStatusEl) submitStatusEl.style.display = 'none';
+
   if (!state.isOnboarding) {
     // a. Display name — prompt on first run only
     if (!profile.display_name) {
@@ -1275,7 +1282,24 @@ export async function showResultsScreen(): Promise<void> {
 
     // b. Submit score — submitScore swallows its own errors, so this never throws
     if (profile.display_name) {
-      isNewBest = await submitScore(boardKey, state.score, state.level, pMode.id, pPace.id);
+      const outcome = await submitScore(boardKey, state.score, state.level, pMode.id, pPace.id);
+      isNewBest = outcome.isNewBest;
+
+      // Say so when nothing reached the board. Without this the player sees a
+      // leaderboard they are simply not on, which is indistinguishable from the
+      // leaderboard being broken — and a refused Turnstile challenge is a
+      // routine outcome on a locked-down network, not an exotic one.
+      const statusEl = document.getElementById('submit-status');
+      if (statusEl) {
+        if (outcome.posted) {
+          statusEl.style.display = 'none';
+        } else {
+          statusEl.textContent = outcome.reason === 'verification'
+            ? "Score not posted — this device couldn't be verified. Your progress is saved."
+            : 'Score not posted — the leaderboard was unreachable. Your progress is saved.';
+          statusEl.style.display = 'block';
+        }
+      }
     }
   }
 
