@@ -241,6 +241,17 @@ test('completing the onboarding round shows "Enter SIGNAL →" and landing on me
 
   await awaitAutoTutorial(page);
 
+  // Captured rather than hardcoded. This assertion used to read `toBe(0)`,
+  // which only passed because new profiles happened to start empty — so
+  // seeding a starting balance broke a test about something else entirely.
+  // What it actually means is "the tutorial pays nothing", and comparing
+  // before against after says that directly, whatever the starting value is.
+  const signalBefore = await page.evaluate(() => {
+    const saved = localStorage.getItem('sig_profile_v1');
+    return saved ? (JSON.parse(saved) as { signal: number }).signal : null;
+  });
+  expect(signalBefore).not.toBeNull();
+
   // Wait for the tutorial to hand control to the player
   await dismissIntroCard(page);
   await waitForTutorialExecute(page);
@@ -313,10 +324,10 @@ test('completing the onboarding round shows "Enter SIGNAL →" and landing on me
   });
   expect(completed).toBe(true);
 
-  // Signal balance must still be 0 — onboarding awards nothing
-  const signal = await page.evaluate(() => {
+  // Onboarding awards nothing: the balance is exactly what it was before.
+  const signalAfter = await page.evaluate(() => {
     const saved = localStorage.getItem('sig_profile_v1');
     return saved ? (JSON.parse(saved) as { signal: number }).signal : null;
   });
-  expect(signal).toBe(0);
+  expect(signalAfter, 'the tutorial must not pay out').toBe(signalBefore);
 });
