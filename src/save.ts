@@ -3,7 +3,7 @@ import type { CustomPalette, SavedProfile, Theme } from './types';
 import { STARTING_SIGNAL } from './economy';
 
 const STORAGE_KEY = 'sig_profile_v1';
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 
 // Derive an edge color by lightening a base hex color.
 // Factor ~1.7 matches the ratio used in all built-in themes.
@@ -35,6 +35,7 @@ const SaveSystem = (() => {
       customPalette: { ...DEFAULT_PALETTE },
       lifetime: { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 },
       hasSeenOnboarding: false,
+      hasSeenMenuTour: false,
       player_id: crypto.randomUUID(),
       owner_secret: crypto.randomUUID(),
       display_name: '',
@@ -86,6 +87,14 @@ const SaveSystem = (() => {
     }
     if (!raw.lifetime) {
       raw.lifetime = { runs: 0, score: 0, highestLevel: 1, signalMined: 0, bestCombo: 0 };
+    }
+    // A save already at the current schema but missing this field never enters
+    // the v17→v18 branch, so without this it would default to false and hand an
+    // established player the tour. Defaulting to `true` here is the safe
+    // direction: a brand-new profile is built by defaultProfile() and never
+    // reaches migrate(), so this only ever sees a save that has existed before.
+    if (typeof raw.hasSeenMenuTour !== 'boolean') {
+      raw.hasSeenMenuTour = true;
     }
 
     if (!raw.schemaVersion || raw.schemaVersion < 2) {
@@ -217,6 +226,14 @@ const SaveSystem = (() => {
       // be friction with nothing behind it.
       raw.attested = true;
       raw.schemaVersion = 17;
+    }
+    if (raw.schemaVersion < 18) {
+      // v17 → v18: menu coach marks. Existing players are marked as having seen
+      // them — they already know where things are, and an established player
+      // being handed a tour after an update reads as the app being broken, not
+      // as help.
+      raw.hasSeenMenuTour = true;
+      raw.schemaVersion = 18;
     }
     return raw;
   }

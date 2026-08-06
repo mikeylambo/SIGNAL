@@ -12,7 +12,7 @@ import { test, expect, Page } from '@playwright/test';
 // matters; asserting on the migration's internals would pass even while a reset
 // was happening.
 
-const CURRENT_SCHEMA = 17;
+const CURRENT_SCHEMA = 18;
 
 type Stored = {
   schemaVersion?: number;
@@ -20,6 +20,7 @@ type Stored = {
   lifetime?: { runs?: number };
   unlockedCalibrations?: string[];
   settings?: Record<string, unknown>;
+  hasSeenMenuTour?: boolean;
 };
 
 /**
@@ -52,7 +53,7 @@ function readProfile(page: Page): Promise<Stored | null> {
 
 // Every version from the one that introduced `settings` through the last one
 // that could still trip over it, plus current. 9–13 were the broken window.
-for (const version of [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) {
+for (const version of [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]) {
   test(`a partial v${version} save migrates without wiping the player`, async ({ page }) => {
     await seedPartial(page, version);
     await page.goto('/');
@@ -72,6 +73,11 @@ for (const version of [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) {
     // the save has been carried up to the current schema.
     expect(profile?.settings).toBeTruthy();
     expect(profile?.schemaVersion).toBe(CURRENT_SCHEMA);
+
+    // An established player must not be handed the menu tour by an update.
+    // They already know where things are, and a tour appearing after a version
+    // bump reads as the app breaking rather than as help.
+    expect(profile?.hasSeenMenuTour, 'migrated saves must not trigger the tour').toBe(true);
   });
 }
 

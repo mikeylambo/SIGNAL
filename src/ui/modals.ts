@@ -6,6 +6,7 @@ import { updateComboUI, showMessage, renderStatsBar } from './hud';
 import { resetAnimTime, loopState } from '../render/loop';
 import { isReducedMotion, toggleReducedMotion } from '../reducedMotion';
 import { updateMenuText } from './menu';
+import { startMenuTour, shouldRunMenuTour } from '../tour';
 import { stopGameplayAudio } from '../audioUnlocks';
 import { adjustCameraForViewport } from '../render/scene';
 
@@ -73,6 +74,22 @@ export function returnToMenu(): void {
 
   // Stop any active gameplay audio layers
   stopGameplayAudio();
+
+  // Menu coach marks, on the first landing after the tutorial — whether it was
+  // completed or skipped. Hooked here rather than at the two onboarding exits
+  // because this is the one function both of them go through, and it is also
+  // where the sheet is actually made visible.
+  //
+  // Deferred a frame: the elements the tour spotlights have just been set to
+  // display:flex, and measuring them in the same task returns the pre-layout
+  // rects — the highlight would land in the wrong place, or at 0,0.
+  //
+  // Gated on hasSeenOnboarding so it cannot fire over a tutorial in progress;
+  // startMenuTour() is a no-op once hasSeenMenuTour is set, so this costs a
+  // property read on every other return to the menu.
+  if (profile.hasSeenOnboarding && shouldRunMenuTour()) {
+    requestAnimationFrame(() => requestAnimationFrame(() => startMenuTour()));
+  }
 }
 
 

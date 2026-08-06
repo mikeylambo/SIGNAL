@@ -95,6 +95,13 @@ export interface SavedProfile {
    * a bypass. See attestation.ts.
    */
   attested: boolean;
+  /**
+   * Whether the menu coach marks have run. Deliberately separate from
+   * `hasSeenOnboarding`: a player who skipped the gameplay tutorial has been
+   * told *less*, not more, so they should still be shown where things are. See
+   * tour.ts.
+   */
+  hasSeenMenuTour: boolean;
 }
 
 export interface ForgeSelection {
