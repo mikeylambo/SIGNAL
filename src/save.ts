@@ -1,4 +1,6 @@
 import type { CustomPalette, SavedProfile, Theme } from './types';
+// Value only — economy.ts imports nothing, so this cannot cycle back into save.
+import { STARTING_SIGNAL } from './economy';
 
 const STORAGE_KEY = 'sig_profile_v1';
 const SCHEMA_VERSION = 17;
@@ -22,7 +24,11 @@ const SaveSystem = (() => {
   function defaultProfile(): SavedProfile {
     return {
       schemaVersion: SCHEMA_VERSION,
-      signal: 0,
+      // Seeded, not zero. See STARTING_SIGNAL in economy.ts: the cheapest item
+      // costs 400 and a first session banks roughly 250-350, so without a seed
+      // the shop is a screen of prices a new player never touches. Applies at
+      // profile creation only — never granted retroactively by a migration.
+      signal: STARTING_SIGNAL,
       unlockedCalibrations: ['mono', 'custom'],
       currentCalibration: 'mono',
       customHex: '#00E5FF',

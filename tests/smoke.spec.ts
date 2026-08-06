@@ -1126,3 +1126,58 @@ test('page metadata makes no cognitive-benefit claims either', async ({ page }) 
   // Still describes the game, rather than being emptied out to pass.
   expect(metas.description.toLowerCase()).toContain('memory game');
 });
+
+// ── Economy ───────────────────────────────────────────────────────────────────
+// The payout curve is policy, not mechanics — see src/economy.ts. These pin the
+// two properties that decide whether a new player ever reaches the shop, because
+// both are invisible from inside a single run and easy to regress by "tidying"
+// the formula.
+
+test('a short run still pays the floor, so early play is never worth nothing', async ({ page }) => {
+  // The old formula was score/10 flat. A level-2 run scoring 95 paid 9 Signal
+  // against a cheapest item of 400 — forty runs for a first unlock, which is how
+  // the shop became a screen a beginner reads and never touches.
+  await page.goto('/');
+  await page.locator('#start-btn').click();
+  await page.waitForTimeout(COUNTDOWN_MS);
+  await expect(page.locator('#pause-btn')).toBeVisible({ timeout: 25000 });
+
+  // End it as fast as possible: the worst run the game can produce.
+  const wrong = await page.evaluate(() => {
+    const sig = (window as unknown as {
+      __signal?: {
+        getState: () => { pattern: number[] };
+        getCubeScreenPos: (i: number) => { x: number; y: number } | null;
+      };
+    }).__signal;
+    if (!sig) return null;
+    const { pattern } = sig.getState();
+    for (let i = 0; i < 9; i++) if (!pattern.includes(i)) return sig.getCubeScreenPos(i);
+    return null;
+  });
+  if (wrong) await page.mouse.click(wrong.x, wrong.y);
+
+  await expect(page.locator('#results-screen')).toBeVisible({ timeout: 20000 });
+
+  const earned = Number((await page.locator('#res-earned-frags').innerText()).trim());
+  expect(Number.isFinite(earned)).toBe(true);
+  expect(earned, 'the shortest possible run must still pay the floor').toBeGreaterThanOrEqual(20);
+});
+
+test('a brand-new profile starts with enough Signal for the shop to be reachable', async ({ page }) => {
+  // Deliberately NOT seeded — this is about what the game creates from nothing.
+  // A first session banks roughly 250-350, and the cheapest material is 400, so
+  // without a seed the first unlock lands outside the first sitting entirely.
+  await page.context().addInitScript(() => localStorage.removeItem('sig_profile_v1'));
+  await page.goto('/');
+  await page.evaluate(() => localStorage.removeItem('sig_profile_v1'));
+  await page.reload();
+
+  await expect(page.locator('#ob-card, #start-btn').first()).toBeVisible({ timeout: 30000 });
+
+  const signal = await page.evaluate(() => {
+    const raw = localStorage.getItem('sig_profile_v1');
+    return raw ? (JSON.parse(raw) as { signal: number }).signal : null;
+  });
+  expect(signal).toBe(150);
+});

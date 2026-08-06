@@ -16,6 +16,7 @@ import { track } from '../telemetry';
 import { activeModifier, assignChromaticChannels, channelFor, modifierBoardSuffix, CHROMATIC_CHANNELS } from './modifiers';
 import { submitScore, modeBoardKey, dailyBoardKey } from './leaderboard';
 import { promptDisplayName, showLeaderboardPanel, showLeaderboardSkeleton } from '../ui/leaderboard';
+import { runPayout } from '../economy';
 
 // isTouchDevice / hitstopScale — duplicated from input.ts to avoid circular deps
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -1155,12 +1156,15 @@ export async function showResultsScreen(): Promise<void> {
     restartBtn.style.display = 'none';
     const todayDate = new Date().toISOString().split('T')[0];
     streakResult = recordDailyCompletion(todayDate);
-    state.earnedFragments = Math.floor(state.score / 5);
+    state.earnedFragments = runPayout({
+      score: state.score, level: state.level, pacingId: pPace.id, isDaily: true,
+    });
     resEarnedFrags.innerText = `${state.earnedFragments} · DAILY BONUS`;
   } else if (!state.isOnboarding) {
     restartBtn.style.display = 'block';
-    state.earnedFragments = Math.floor(state.score / 10);
-    if (pPace.id === 'zen') state.earnedFragments = Math.floor(state.maxStreak * 2);
+    state.earnedFragments = runPayout({
+      score: state.score, level: state.level, pacingId: pPace.id, isDaily: false,
+    });
     resEarnedFrags.innerText = String(state.earnedFragments);
   } else {
     // Onboarding: zero signal, no restart
