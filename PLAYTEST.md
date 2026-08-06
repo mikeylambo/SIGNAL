@@ -2,7 +2,7 @@
 
 For the first round with ~10 people who have never seen SIGNAL.
 
-**URL:** https://signal-brain-training.vercel.app/
+**URL:** https://signalcc.app/
 
 Ask them to open it on their **own phone**, not yours. A borrowed device with an
 existing save is a different game: no splash, no callsign prompt, no Turnstile

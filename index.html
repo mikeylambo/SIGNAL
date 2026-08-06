@@ -15,6 +15,13 @@
          Google reject for an app that cannot substantiate them — the same reason
          the shop's audio copy was rewritten. Keep this descriptive. -->
     <meta name="description" content="SIGNAL is a 3D memory game. Watch the pattern, play it back. Five recall protocols, three pacing modes, two modifiers, a daily challenge and shared leaderboards, with bloom lighting and haptics.">
+    <!-- Canonical and og:url are the two places the origin is hard-coded, because
+         both are meaningless relative. Everything else — the manifest, the service
+         worker, the CSP — is origin-relative and moved domains without edits.
+         If the domain ever changes again, these are the lines to change. -->
+    <link rel="canonical" href="https://signalcc.app/">
+    <meta property="og:url" content="https://signalcc.app/">
+    <meta property="og:site_name" content="SIGNAL">
     <meta property="og:title" content="SIGNAL — Cognitive Calibration Engine">
     <meta property="og:description" content="A 3D memory game: watch the pattern, play it back. Five recall protocols, three pacings, a daily challenge and shared leaderboards.">
     <meta property="og:type" content="website">

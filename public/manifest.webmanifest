@@ -1,7 +1,7 @@
 {
   "name": "SIGNAL — Cognitive Calibration Engine",
   "short_name": "SIGNAL",
-  "description": "A 3D memory training game. Five cognitive protocols, three pacing modes, a daily challenge and a leaderboard.",
+  "description": "A 3D memory game. Watch the pattern, play it back. Five recall protocols, three pacing modes, a daily challenge and shared leaderboards.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
