@@ -139,6 +139,12 @@ export interface LeaderboardRow {
   score: number;
   player_id: string;
   achieved_at: string;  // ISO timestamp (maps to created_at in DB)
+  /**
+   * Lifetime Signal this player has earned. Shown beside their entry as a
+   * record of time invested — it buys nothing and affects no ranking. Defaults
+   * to 0 for rows written before the column existed.
+   */
+  signal_mined: number;
 }
 
 export interface Protocol {

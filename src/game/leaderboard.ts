@@ -147,6 +147,10 @@ export async function submitScore(
       p_level_reached: levelReached,
       p_protocol:      protocol ?? null,
       p_pacing:        pacing ?? null,
+      // Lifetime Signal, shown beside the board entry. Sent every submission
+      // because it is a running total: the server refreshes it unconditionally
+      // rather than only when the score improves.
+      p_signal_mined:  Math.max(0, Math.floor(profile.lifetime?.signalMined ?? 0)),
     }).abortSignal(AbortSignal.timeout(FETCH_TIMEOUT_MS));
 
     if (error) throw error;
@@ -262,7 +266,7 @@ export async function fetchBoard(
   // indefinitely — there was no upper bound on how long a read could pend.
   const { data, error } = await supabase
     .from('leaderboard_scores')
-    .select('display_name, score, player_id, created_at')
+    .select('display_name, score, player_id, created_at, signal_mined')
     .eq('board_key', boardKey)
     .order('score', { ascending: false })
     .limit(limit)
@@ -276,5 +280,6 @@ export async function fetchBoard(
     score:        row.score as number,
     player_id:    row.player_id as string,
     achieved_at:  row.created_at as string,
+    signal_mined: (row.signal_mined as number | null) ?? 0,
   }));
 }

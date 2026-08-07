@@ -163,7 +163,15 @@ function renderRows(scores: LeaderboardRow[], body: HTMLElement): void {
       `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;`,
       `border-bottom:1px solid rgba(255,255,255,0.04);${highlight}">`,
       `<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-muted);min-width:20px;">${row.rank}</span>`,
-      `<span style="font-family:var(--font-display);font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(row.display_name)}</span>`,
+      `<span style="display:flex;flex-direction:column;flex:1;min-width:0;">`,
+      `<span style="font-family:var(--font-display);font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(row.display_name)}</span>`,
+      // Lifetime Signal, under the name. Suppressed at 0 rather than shown as
+      // "0 mined": every row written before the column existed reads 0, and a
+      // board of zeroes would look broken rather than empty.
+      row.signal_mined > 0
+        ? `<span style="font-family:var(--font-mono);font-size:0.58rem;color:var(--text-muted);letter-spacing:0.5px;margin-top:1px;">${row.signal_mined.toLocaleString()} \u25c8 mined</span>`
+        : '',
+      `</span>`,
       `<span style="font-family:var(--font-mono);font-size:0.82rem;font-weight:700;">${row.score.toLocaleString()}</span>`,
       reportBtn,
       `</div>`,

@@ -16,6 +16,13 @@ create table if not exists leaderboard_scores (
   level_reached int
 );
 
+-- Lifetime Signal earned by this player, shown beside their board entry.
+-- Added by ALTER rather than in the CREATE above so an existing deployment
+-- picks it up -- CREATE TABLE IF NOT EXISTS is a no-op on a live database, so
+-- editing the block above alone would change nothing where it matters.
+alter table leaderboard_scores
+  add column if not exists signal_mined bigint not null default 0;
+
 -- One row per (player × board): upsert replaces rather than appending duplicates
 alter table leaderboard_scores
   drop constraint if exists leaderboard_scores_board_player_unique;
@@ -380,13 +387,24 @@ drop function if exists update_display_name(uuid, text);
 -- tell whether a run was a new personal best). create-or-replace can't change
 -- a function's return type either, even with an otherwise-identical parameter
 -- list, so this signature needs an explicit drop too.
-drop function if exists submit_score(text, uuid, uuid, text, int, int, text, text);
+drop function if exists submit_score(text, uuid, uuid, text, int, int, text, text, bigint);
 
 -- SECURITY DEFINER: runs as the function owner (bypasses RLS) so it can
 -- insert/update without an anon INSERT policy on the table.
 --
 -- Upsert logic: only updates the stored row when the incoming score is strictly
 -- higher than the existing one.  If the new score is lower, the call is a no-op.
+-- Dropped rather than replaced: CREATE OR REPLACE cannot add a parameter, it
+-- creates a second overload, and two candidates leave PostgREST resolving an
+-- ambiguous call. p_signal_mined carries a DEFAULT so the currently-deployed
+-- client -- which sends eight arguments -- keeps working in the window between
+-- this migration and the next front-end deploy.
+-- Both signatures: a live database has the eight-argument form, a re-run of
+-- this file has the nine. Dropping only one leaves two overloads and an
+-- ambiguous RPC.
+drop function if exists submit_score(text, uuid, uuid, text, int, int, text, text);
+drop function if exists submit_score(text, uuid, uuid, text, int, int, text, text, bigint);
+
 create or replace function submit_score(
   p_board_key     text,
   p_player_id     uuid,
@@ -395,7 +413,8 @@ create or replace function submit_score(
   p_score         int,
   p_level_reached int    default null,
   p_protocol      text   default null,
-  p_pacing        text   default null
+  p_pacing        text   default null,
+  p_signal_mined  bigint default 0
 )
 returns boolean
 language plpgsql
@@ -461,6 +480,17 @@ begin
       p_score, p_level_reached, max_plausible_score(p_level_reached);
   end if;
 
+  -- signal_mined is cosmetic -- a lifetime total shown beside the board entry,
+  -- buying nothing and affecting no ranking. It is still client-supplied, so it
+  -- is bounded: unvalidated it is a free billboard for whatever number someone
+  -- feels like sending. The ceiling is far above any reachable total.
+  if p_signal_mined is null or p_signal_mined < 0 then
+    raise exception 'signal_mined must be >= 0';
+  end if;
+  if p_signal_mined > 100000000 then
+    raise exception 'signal_mined exceeds maximum (100,000,000)';
+  end if;
+
   -- Submission rate. The binding case for the limit is NOT a long run — it is a
   -- player who keeps failing immediately and hitting "Run Again". That cycle is
   -- roughly 15–20s (countdown, a flash, a mistake, the results screen), so real
@@ -473,10 +503,10 @@ begin
   perform bump_rate_limit('submit_ip:' || coalesce(client_ip(), 'unknown'), 1500, interval '1 hour');
 
   insert into leaderboard_scores
-    (board_key, player_id, display_name, score, level_reached, protocol, pacing)
+    (board_key, player_id, display_name, score, level_reached, protocol, pacing, signal_mined)
   values
     (p_board_key, p_player_id, trim(p_display_name),
-     p_score, p_level_reached, p_protocol, p_pacing)
+     p_score, p_level_reached, p_protocol, p_pacing, p_signal_mined)
   on conflict (board_key, player_id)
   do update set
     score         = excluded.score,
@@ -492,6 +522,16 @@ begin
   -- A row skipped by the WHERE clause (existing score was already as high or
   -- higher) does not count, giving us "was this a new personal best?" for free.
   get diagnostics v_row_count = row_count;
+
+  -- Refreshed unconditionally, and deliberately NOT inside the upsert above:
+  -- that DO UPDATE is gated on beating your own score, so a lifetime total
+  -- folded into it would freeze on the day of a player's personal best and
+  -- misreport them forever after. It is a running total, so it has to move
+  -- every time they play, not only when they improve.
+  update leaderboard_scores
+     set signal_mined = p_signal_mined
+   where board_key = p_board_key and player_id = p_player_id;
+
   return v_row_count > 0;
 end;
 $$;
@@ -877,7 +917,7 @@ revoke execute on function
     tokenize_display_name(text, text),
     is_name_blocked(text),
     max_plausible_score(int),
-    submit_score(text, uuid, uuid, text, int, int, text, text),
+    submit_score(text, uuid, uuid, text, int, int, text, text, bigint),
     update_display_name(uuid, uuid, text),
     delete_player_data(uuid, uuid),
     report_player(uuid, uuid, uuid)
@@ -886,7 +926,7 @@ revoke execute on function
 -- The only four the game calls directly. Each is SECURITY DEFINER and does its
 -- own validation, ownership check and rate limiting; the helpers they call
 -- internally run as the definer, so revoking those from anon costs nothing.
-grant execute on function submit_score(text, uuid, uuid, text, int, int, text, text) to anon, authenticated;
+grant execute on function submit_score(text, uuid, uuid, text, int, int, text, text, bigint) to anon, authenticated;
 grant execute on function update_display_name(uuid, uuid, text)                      to anon, authenticated;
 grant execute on function delete_player_data(uuid, uuid)                             to anon, authenticated;
 grant execute on function report_player(uuid, uuid, uuid)                            to anon, authenticated;

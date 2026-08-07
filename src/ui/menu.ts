@@ -16,6 +16,7 @@ import { openLeaderboardBrowser, promptDisplayName } from './leaderboard';
 import { setDisplayName, deletePlayerData } from '../game/leaderboard';
 import { renderMasteryList } from '../progression';
 import { BOARD_MATERIALS, isMaterialUnlocked, buyMaterial, setActiveMaterial, getMaterial } from '../materials';
+import { headerSignal, hasBoughtEverything } from '../completion';
 import { hasPremium, isPremiumOfferAvailable, PREMIUM_BENEFITS, paletteSlotCount } from '../entitlements';
 import { createBoard } from '../render/board';
 import { MODIFIERS, getModifier, isModifierUnlocked, modifiersAvailableFor, setModifier, type ModifierId } from '../game/modifiers';
@@ -84,7 +85,22 @@ export function updateMenuText(): void {
   }
 
   // Header balance
-  if (balanceEl) balanceEl.textContent = String(getSignal());
+  // Once the shop is exhausted the balance is a number that can never be spent,
+  // so it stops being a wallet and becomes a record: lifetime Signal mined,
+  // marked with a different glyph and tooltip so it does not read as a balance
+  // that has mysteriously stopped mattering. See completion.ts.
+  if (balanceEl) {
+    const { value, label, isRecord } = headerSignal();
+    balanceEl.textContent = String(value);
+    const wrap = document.getElementById('header-balance');
+    if (wrap) {
+      wrap.title = label;
+      wrap.setAttribute('aria-label', `${value} ${label}`);
+      const glyph = wrap.querySelector('.header-signal-glyph');
+      if (glyph) glyph.textContent = isRecord ? '◈' : '⟠';
+      wrap.style.color = isRecord ? 'var(--text-muted)' : 'var(--currency)';
+    }
+  }
 
   // Daily row state
   const today = new Date().toISOString().split('T')[0];
@@ -110,6 +126,26 @@ export function populateStore(): void {
 
   const cnt = document.getElementById('store-items-container')!;
   cnt.innerHTML = '';
+
+  // Acknowledge completion rather than leaving a shop full of "Equipped" buttons
+  // and a balance that can no longer do anything. Placed above the items, not
+  // instead of them — the collection is the point, and hiding it would read as
+  // the feature being taken away.
+  if (hasBoughtEverything()) {
+    const done = document.createElement('div');
+    done.id = 'store-complete-note';
+    done.style.cssText = [
+      'border:1px solid rgba(57,255,136,0.3); border-radius:4px;',
+      'background:rgba(57,255,136,0.06); padding:12px 14px; margin-bottom:14px;',
+      'font-family:var(--font-mono); font-size:0.72rem; line-height:1.6;',
+      'color:var(--correct); text-align:left; letter-spacing:0.3px;',
+    ].join('');
+    done.innerHTML =
+      'Collection complete — everything here is yours.<br>' +
+      '<span style="color:var(--text-muted);">Signal now counts as a lifetime total ' +
+      'and shows next to your leaderboard entry.</span>';
+    cnt.appendChild(done);
+  }
 
   Object.keys(themes).forEach(key => {
     if (key === 'custom') return;

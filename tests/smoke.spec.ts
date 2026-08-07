@@ -1181,3 +1181,70 @@ test('a brand-new profile starts with enough Signal for the shop to be reachable
   });
   expect(signal).toBe(150);
 });
+
+// ── Saturated economy ─────────────────────────────────────────────────────────
+// Signal has a fixed 15,700 sink and nothing renewable behind it, so a committed
+// player eventually owns everything and the balance becomes a number that can
+// never be spent. The economy saturating is fine — that is completion. Having no
+// answer for what happens next is not, and these assert the answer.
+
+const EVERYTHING = {
+  unlockedMaterials: ['matte', 'chrome', 'glass', 'facet', 'lattice'],
+  unlockedCalibrations: ['mono', 'custom', 'ferro', 'glacier', 'redline'],
+  unlockedAudioFeatures: ['spatial', 'binaural', 'gamma'],
+  signal: 4321,
+  lifetime: { runs: 200, score: 250000, highestLevel: 14, signalMined: 28540, bestCombo: 30 },
+};
+
+test('with items still to buy, the header shows a spendable balance', async ({ page }) => {
+  await seedEconomy(page, { signal: 4321 });
+  await page.goto('/');
+  await expect(page.locator('#start-btn')).toBeVisible({ timeout: 30000 });
+
+  await expect(page.locator('#header-signal-val')).toHaveText('4321');
+  await expect(page.locator('#header-balance')).toHaveAttribute('title', /balance/i);
+});
+
+test('once everything is owned the balance becomes a lifetime record', async ({ page }) => {
+  // The number changes meaning rather than disappearing: a spendable 4321 gives
+  // way to 28540 mined. Hiding it would read as the feature being removed.
+  await seedEconomy(page, EVERYTHING);
+  await page.goto('/');
+  await expect(page.locator('#start-btn')).toBeVisible({ timeout: 30000 });
+
+  await expect(page.locator('#header-signal-val')).toHaveText('28540');
+  await expect(page.locator('#header-balance')).toHaveAttribute('title', /lifetime/i);
+  // Label and value must never disagree — a lifetime total under a "balance"
+  // label would be worse than either alone, which is why headerSignal()
+  // returns both together.
+  await expect(page.locator('#header-balance')).toHaveAttribute('aria-label', /28540 Signal mined/i);
+});
+
+test('the shop acknowledges a completed collection', async ({ page }) => {
+  await seedEconomy(page, EVERYTHING);
+  await page.goto('/');
+  await expect(page.locator('#start-btn')).toBeVisible({ timeout: 30000 });
+  await page.locator('#store-btn').click();
+
+  const note = page.locator('#store-complete-note');
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('Collection complete');
+
+  // Above the items, not instead of them — the collection is the point.
+  const noteBox  = (await note.boundingBox())!;
+  const firstBuy = (await page.locator('.store-item').first().boundingBox())!;
+  expect(noteBox.y).toBeLessThan(firstBuy.y);
+});
+
+test('one unbought item is enough to keep the shop in its normal state', async ({ page }) => {
+  // The boundary is what matters: hasBoughtEverything() spans three separate
+  // systems (materials, Calibrations, audio) and missing any one of them must
+  // still count as incomplete.
+  await seedEconomy(page, { ...EVERYTHING, unlockedAudioFeatures: ['spatial', 'binaural'] });
+  await page.goto('/');
+  await expect(page.locator('#start-btn')).toBeVisible({ timeout: 30000 });
+
+  await expect(page.locator('#header-signal-val')).toHaveText('4321');
+  await page.locator('#store-btn').click();
+  await expect(page.locator('#store-complete-note')).toHaveCount(0);
+});
