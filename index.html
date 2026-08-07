@@ -14,7 +14,15 @@
          promises, and implied cognitive-benefit claims are exactly what Apple and
          Google reject for an app that cannot substantiate them — the same reason
          the shop's audio copy was rewritten. Keep this descriptive. -->
-    <meta name="description" content="SIGNAL is a 3D memory game. Watch the pattern, play it back. Five recall protocols, three pacing modes, two modifiers, a daily challenge and shared leaderboards, with bloom lighting and haptics.">
+    <!-- "and haptics" was dropped, not because haptics do not exist but because
+         they cannot exist on iOS: Safari has never implemented the Vibration
+         API, so navigator.vibrate is undefined in Safari and in any WKWebView.
+         A description shown to every visitor should not name a feature the
+         majority platform cannot deliver. The Settings toggle already hides
+         itself where it is unsupported; this is the copy catching up.
+         It can come back if the app ever ships natively, where the Taptic
+         Engine is reachable. -->
+    <meta name="description" content="SIGNAL is a 3D memory game. Watch the pattern, play it back. Five recall protocols, three pacing modes, two modifiers, a daily challenge and shared leaderboards, with bloom lighting.">
     <!-- Canonical and og:url are the two places the origin is hard-coded, because
          both are meaningless relative. Everything else — the manifest, the service
          worker, the CSP — is origin-relative and moved domains without edits.

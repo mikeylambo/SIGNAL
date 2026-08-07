@@ -16,27 +16,25 @@ the answers are bad you want to know before paying for anything.
 
 ---
 
-## The live bug this uncovered
+## Haptics, and what was actually wrong
 
 **`navigator.vibrate` does not exist on iOS.** Safari has never implemented the
 Vibration API, and WKWebView inherits that. So on every iPhone:
 
 - `haptic()` in `audio.ts` returns at `!navigator.vibrate` and does nothing
-- the **Haptics toggle in Settings toggles nothing**
-- the page description and store copy say "with bloom lighting and haptics"
 
-That is inaccurate today, on the web, for the majority platform — not a
-Capacitor problem. It is only listed here because the wrapper is what fixes it:
+The Settings toggle already handles this correctly — `updateHapticsToggleText()`
+hides the button on iOS and on any device without `navigator.vibrate`, with a
+comment explaining why hiding beats showing "Unsupported". An earlier draft of
+this document claimed the toggle was broken. It is not.
+
+What *was* wrong was the copy: the page description promised "bloom lighting and
+haptics" to every visitor, including the majority who cannot receive them. That
+has been corrected — the mention is gone until the app can deliver it.
+
+It is listed here because the wrapper is what makes the capability real:
 `@capacitor/haptics` reaches the Taptic Engine properly, and it is a better
 effect than the Vibration API gives on Android anyway.
-
-Two options, and they are not exclusive:
-
-1. Fix the copy now (drop "haptics", or qualify it), since it is a claim that is
-   false for most players.
-2. Fix the capability in the wrapper, and let the copy become true on iOS.
-
-Doing 2 without 1 leaves the web build still claiming something it cannot do.
 
 ---
 
@@ -99,11 +97,10 @@ identity creation another way.
 1. Build and install to a device (free Apple ID, seven-day build)
 2. Answer the Turnstile question
 3. Make the four changes above
-4. Decide on the haptics copy
-5. Reinstate the LLC — paperwork with a waiting period, so start it early
-6. Enroll, TestFlight, listing
+4. Reinstate the LLC — paperwork with a waiting period, so start it early
+5. Enroll, TestFlight, listing
 
-Steps 1–4 need a Mac with Xcode. Nothing in them needs a paid account, an
+Steps 1–3 need a Mac with Xcode. Nothing in them needs a paid account, an
 entity, or a decision about the store name.
 
 ## Commands (macOS)
