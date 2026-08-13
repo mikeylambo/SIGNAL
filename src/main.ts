@@ -172,8 +172,10 @@ window.addEventListener('load', () => {
 
   // Service worker: offline play. Registered after load so it never competes
   // with first paint, and skipped on localhost dev where a cached shell would
-  // mask code changes behind a stale service worker.
-  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  // mask code changes behind a stale service worker. itch.io serves the game
+  // under an embedding subdirectory while this worker intentionally assumes a
+  // root-domain PWA, so the itch build omits registration entirely.
+  if ('serviceWorker' in navigator && import.meta.env.PROD && import.meta.env.VITE_ITCH_BUILD !== '1') {
     navigator.serviceWorker.register('/sw.js').catch(err => {
       // Non-fatal by design: no service worker just means no offline play.
       console.warn('[SIGNAL] Service worker registration failed', err);
