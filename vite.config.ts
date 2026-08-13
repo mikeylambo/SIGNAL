@@ -1,5 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 
+const IS_ITCH_BUILD = process.env['SIGNAL_ITCH_BUILD'] === '1';
+
 /**
  * Fails a production build that would ship with no leaderboard code at all.
  *
@@ -59,6 +61,13 @@ function requireBackendEnv(): Plugin {
 
 export default defineConfig({
   plugins: [requireBackendEnv()],
+
+  // itch.io serves HTML5 uploads from a project-specific subdirectory rather
+  // than from the host root. The normal Vercel build intentionally stays on
+  // `/`; only `npm run build:itch` flips this to a relative base so generated
+  // asset/module URLs survive that embedding path.
+  base: IS_ITCH_BUILD ? './' : '/',
+
   build: {
     // Three.js + postprocessing is large by design; suppress the warning
     chunkSizeWarningLimit: 1000,
