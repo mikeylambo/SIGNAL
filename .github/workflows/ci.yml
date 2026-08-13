@@ -62,6 +62,17 @@ jobs:
             exit 1
           fi
 
+      - name: Build itch artifact
+        # itch hosts HTML5 games under a generated subdirectory rather than the
+        # site root. This runs the exact packaging command used for release and
+        # lets prepare-itch-build.mjs fail CI if a root-absolute runtime path
+        # sneaks back into the artifact.
+        run: |
+          npm run build:itch
+          test -f dist/index.html
+          test ! -e dist/manifest.webmanifest
+          test ! -e dist/sw.js
+
       - name: Verify the build refuses to ship without a backend
         # The inverse case. If this ever stops failing, the guard has regressed
         # and a broken build could ship silently again.
