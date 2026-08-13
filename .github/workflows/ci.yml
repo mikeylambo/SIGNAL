@@ -122,11 +122,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
 
       - name: Create database and Supabase roles
-        # anon and authenticated are created by Supabase, not by schema.sql, so
-        # a bare Postgres needs them before the grants will resolve.
+        # anon, authenticated and service_role are created by Supabase, not by
+        # schema.sql, so a bare Postgres needs them before grants will resolve.
         run: |
           psql -d postgres -v ON_ERROR_STOP=1 -c 'create database sigtest;'
-          psql -v ON_ERROR_STOP=1 -c 'create role anon nologin;' -c 'create role authenticated nologin;'
+          psql -v ON_ERROR_STOP=1 \
+            -c 'create role anon nologin;' \
+            -c 'create role authenticated nologin;' \
+            -c 'create role service_role nologin;'
 
       - name: Apply schema
         run: psql -v ON_ERROR_STOP=1 -f supabase/schema.sql
