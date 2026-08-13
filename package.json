@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:itch": "VITE_ITCH_BUILD=1 SIGNAL_ITCH_BUILD=1 npm run build && node scripts/prepare-itch-build.mjs",
     "preview": "vite preview",
     "test": "playwright test",
     "check:launch": "node scripts/check-launch.mjs"
