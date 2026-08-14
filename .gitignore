@@ -38,3 +38,7 @@ screenshots/
 *.sln
 *.sw?
 .vercel
+
+# itch.io upload artifact — regenerate with `npm run build:itch`
+signal-itch.zip
+*.itch.zip
